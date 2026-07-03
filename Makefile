@@ -8,8 +8,11 @@
 
 BUMP ?= patch
 VSIX = tfplan-colors.vsix
+# lazy (=) so it re-reads package.json after bump has run
+VERSION = $(shell node -p "require('./package.json').version")
+PUBLISHER = $(shell node -p "require('./package.json').publisher")
 
-.PHONY: package publish preflight bump publish-ovsx publish-vsce
+.PHONY: package publish preflight bump push publish-ovsx publish-vsce
 
 package:
 	vsce package -o $(VSIX)
@@ -19,18 +22,26 @@ package:
 # MS marketplace step can hang on validation polling — if it does, the upload
 # usually succeeded and Ctrl+C is safe (verify with: vsce show lite2073.tfplan-colors).
 # preflight runs before bump so a missing token can't strand a bumped version.
-publish: preflight bump publish-ovsx publish-vsce
+# push runs last so tags only reach the remote for published versions, and
+# pushes only the current version's tag; if the vsce step hangs and you
+# Ctrl+C, run `make push` afterwards.
+publish: preflight bump publish-ovsx publish-vsce push
 
+# dirty check is stricter than npm version's own: also refuses on untracked
+# files, since vsce/ovsx package the working tree and would ship them uncommitted
 preflight:
-ifndef OVSX_PAT
-	$(error OVSX_PAT is not set — export your Open VSX token first)
-endif
+	@test -z "$$(git status --porcelain)" || { git status --short; echo "error: git tree is dirty — commit or stash first"; exit 1; }
+	@vsce ls-publishers 2>/dev/null | grep -qx "$(PUBLISHER)" || { echo "error: vsce is not logged in as $(PUBLISHER) — run: vsce login $(PUBLISHER)"; exit 1; }
+	@test -n "$$OVSX_PAT" || { echo "error: OVSX_PAT is not set — export your Open VSX token first"; exit 1; }
 
 bump:
 	npm version $(BUMP)
 
-publish-ovsx: package preflight
+push:
+	git push origin HEAD "v$(VERSION)"
+
+publish-ovsx: preflight package
 	ovsx publish $(VSIX)
 
-publish-vsce: package
+publish-vsce: preflight package
 	vsce publish --packagePath $(VSIX)
