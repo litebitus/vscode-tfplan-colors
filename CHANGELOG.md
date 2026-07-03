@@ -1,3 +1,9 @@
+## 1.0.0 (2026-07-03)
+
+- feat: extract parsing into lib.js with test suite; fix forget-header classification
+- feat: auto-refresh plan preview, uninstall target, diagnostics logging
+- feat: render binary plans via terraform show, save rendered plan as text
+
 ## 0.1.6 (2026-07-03)
 
 - docs: add usage example; mention .tfplan in description
