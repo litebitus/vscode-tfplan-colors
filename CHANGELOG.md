@@ -1,3 +1,9 @@
+## 1.1.0 (2026-07-03)
+
+- fix: rename rendered previews to dodge custom editor claims; gate package on test-all
+- test: integration tests for navigation resolution and status bar; document manual checklist
+- feat: module-nested outline, folding-based sticky scroll, status bar address, plan-language auto-promotion, editor defaults; fix text plan outline navigation
+
 ## 1.0.0 (2026-07-03)
 
 - feat: extract parsing into lib.js with test suite; fix forget-header classification
