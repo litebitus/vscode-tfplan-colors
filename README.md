@@ -3,6 +3,13 @@
 Colorizes saved `terraform plan` output text files (e.g. `2026.5.7.2230.tfplan`,
 `plan-2026.5.7.2230.txt`, `prod.tfplan.txt`).
 
+```sh
+terraform plan -out=tfplan
+terraform show tfplan -no-color > $(date +%Y.%-m.%-d.%H%M).tfplan
+# extension colorizes the tfplan in IDE
+# commit the plan for record if desired
+```
+
 ## Colors
 
 | Marker | Action | Color |
