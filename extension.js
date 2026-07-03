@@ -3,8 +3,11 @@ const cp = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const {
+  ACTION_MARKER,
   scanLine,
   planSymbols,
+  foldingRanges,
+  resourceAtLine,
   looksLikePlanText,
   isZipMagic,
   timestampPlanName,
@@ -69,6 +72,17 @@ function isPlanDoc(doc) {
   return looksLikePlanText(head);
 }
 
+// Plaintext docs that sniff as plans get promoted to the terraform-plan
+// language, so language-scoped features (folding-based sticky scroll, word
+// wrap, line highlight, breadcrumb defaults) apply — not just the
+// content-based ones (colors, symbols).
+function promoteIfPlan(doc) {
+  if (doc.languageId !== 'plaintext') return;
+  if (isPlanDoc(doc)) {
+    vscode.languages.setTextDocumentLanguage(doc, 'terraform-plan');
+  }
+}
+
 function updateDecorations(editor) {
   const doc = editor.document;
   const lineBuckets = {};
@@ -109,6 +123,15 @@ function updateVisibleEditors() {
   }
 }
 
+class PlanFoldingProvider {
+  provideFoldingRanges(doc) {
+    if (!isPlanDoc(doc)) return [];
+    const lines = [];
+    for (let i = 0; i < doc.lineCount; i++) lines.push(doc.lineAt(i).text);
+    return foldingRanges(lines).map((r) => new vscode.FoldingRange(r.start, r.end));
+  }
+}
+
 class PlanSymbolProvider {
   provideDocumentSymbols(doc) {
     if (!isPlanDoc(doc)) return [];
@@ -119,6 +142,17 @@ class PlanSymbolProvider {
 }
 
 function toDocumentSymbol(s, lines) {
+  if (s.type === 'module') {
+    const sym = new vscode.DocumentSymbol(
+      s.name,
+      '',
+      vscode.SymbolKind.Module,
+      new vscode.Range(s.startLine, 0, s.endLine, lines[s.endLine].length),
+      new vscode.Range(s.startLine, 0, s.startLine, lines[s.startLine].length)
+    );
+    sym.children = s.children.map((c) => toDocumentSymbol(c, lines));
+    return sym;
+  }
   if (s.type === 'resource') {
     return new vscode.DocumentSymbol(
       s.name,
@@ -154,6 +188,19 @@ function toDocumentSymbol(s, lines) {
 // terraform-plan language and therefore all the coloring above.
 
 const SHOW_SCHEME = 'tfplan-show';
+// preview paths get this suffix so they end in .tfplan — a path matching the
+// custom editor's binary-shaped default claim (e.g. bare `tfplan`) would make
+// generic re-opens (Outline clicks) hijack the preview and drop the selection
+const SHOW_SUFFIX = '.rendered.tfplan';
+
+function previewUriFor(uri) {
+  return uri.with({ scheme: SHOW_SCHEME, path: uri.path + SHOW_SUFFIX });
+}
+
+function planPathFor(previewUri) {
+  const p = previewUri.fsPath;
+  return p.endsWith(SHOW_SUFFIX) ? p.slice(0, -SHOW_SUFFIX.length) : p;
+}
 
 let logChannel;
 function log(msg) {
@@ -187,7 +234,7 @@ class PlanShowProvider {
   watch(previewUri) {
     const key = previewUri.toString();
     if (this._watchers.has(key)) return;
-    const file = previewUri.fsPath;
+    const file = planPathFor(previewUri);
     const watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file))
     );
@@ -236,7 +283,7 @@ class PlanShowProvider {
     // attach here, not on open events: this runs for every render,
     // including tabs restored on window reload where no open event fires
     this.watch(uri);
-    const file = uri.fsPath;
+    const file = planPathFor(uri);
     log(`render requested: ${file}`);
     return new Promise((resolve) => {
       // cwd must be the plan's stack folder: terraform show needs the
@@ -278,7 +325,7 @@ class BinaryPlanEditorProvider {
       return;
     }
     panel.webview.html = '<html><body>Rendering plan with terraform show…</body></html>';
-    const previewUri = uri.with({ scheme: SHOW_SCHEME });
+    const previewUri = previewUriFor(uri);
     // VSCode caches closed virtual docs; if one is being revived, its content
     // is stale (the plan may have changed while unwatched) — force a re-render
     const cached = vscode.workspace.textDocuments.some(
@@ -300,7 +347,7 @@ async function saveRenderedPlan() {
     return;
   }
   const target = await vscode.window.showSaveDialog({
-    defaultUri: vscode.Uri.file(path.join(path.dirname(editor.document.uri.fsPath), timestampPlanName())),
+    defaultUri: vscode.Uri.file(path.join(path.dirname(planPathFor(editor.document.uri)), timestampPlanName())),
     filters: { 'Terraform Plan': ['tfplan'] },
   });
   if (!target) return;
@@ -321,6 +368,41 @@ function activate(context) {
   log('extension activated');
   createDecorationTypes(context);
   const showProvider = new PlanShowProvider();
+  const flashType = vscode.window.createTextEditorDecorationType({
+    backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+    isWholeLine: true,
+  });
+  let flashTimer;
+
+  // status bar: full resource address at the cursor — sticky scroll and
+  // breadcrumbs truncate deeply nested addresses; this keeps the leaf end
+  // visible, the full address in the tooltip, and copies it on click
+  const addressItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  addressItem.command = 'tfplanColors.copyResourceAddress';
+  let currentAddress = null;
+
+  function updateAddressItem(editor) {
+    if (!editor || !isPlanDoc(editor.document)) {
+      currentAddress = null;
+      addressItem.hide();
+      return;
+    }
+    const lines = [];
+    for (let i = 0; i < editor.document.lineCount; i++) lines.push(editor.document.lineAt(i).text);
+    const hit = resourceAtLine(lines, editor.selection.active.line);
+    if (!hit) {
+      currentAddress = null;
+      addressItem.hide();
+      return;
+    }
+    currentAddress = hit.address;
+    const label = `${ACTION_MARKER[hit.action]} ${hit.address}`;
+    const MAX = 60;
+    // left-truncate: the leaf module/resource end must stay visible
+    addressItem.text = label.length > MAX ? `…${label.slice(label.length - MAX + 1)}` : label;
+    addressItem.tooltip = `${hit.address}\n\n${hit.action} — click to copy address`;
+    addressItem.show();
+  }
 
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider(
@@ -328,16 +410,63 @@ function activate(context) {
       new PlanSymbolProvider()
     ),
     showProvider,
+    vscode.languages.registerFoldingRangeProvider({ language: 'terraform-plan' }, new PlanFoldingProvider()),
     vscode.workspace.registerTextDocumentContentProvider(SHOW_SCHEME, showProvider),
+    vscode.workspace.onDidOpenTextDocument(promoteIfPlan),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.uri.scheme === SHOW_SCHEME) showProvider.unwatch(doc.uri);
     }),
     vscode.window.registerCustomEditorProvider('tfplanColors.binaryPlan', new BinaryPlanEditorProvider(showProvider), {
       supportsMultipleEditorsPerDocument: false,
     }),
+    // same provider under 'option' priority: any *tfplan* file can be
+    // previewed via "Reopen Editor With…". Auto-open (default priority) is
+    // reserved for binary-shaped names (contain tfplan, don't end in .tfplan);
+    // *.tfplan is the text-snapshot format — a default-priority claim on it
+    // would hijack generic re-opens (e.g. Outline clicks) and drop their
+    // selection, leaving navigation dead
+    vscode.window.registerCustomEditorProvider('tfplanColors.binaryPlanOptional', new BinaryPlanEditorProvider(showProvider), {
+      supportsMultipleEditorsPerDocument: false,
+    }),
     vscode.commands.registerCommand('tfplanColors.saveRenderedPlan', saveRenderedPlan),
+    addressItem,
+    vscode.commands.registerCommand('tfplanColors.copyResourceAddress', async () => {
+      if (!currentAddress) return;
+      await vscode.env.clipboard.writeText(currentAddress);
+      vscode.window.setStatusBarMessage(`Copied: ${currentAddress}`, 2000);
+    }),
+    vscode.window.onDidChangeTextEditorSelection((e) => updateAddressItem(e.textEditor)),
+    flashType,
+    // flash the landing line on programmatic navigation (outline click,
+    // go-to-symbol) so the jump target is obvious in a long plan
+    vscode.window.onDidChangeTextEditorSelection((e) => {
+      // outline clicks arrive with kind undefined (programmatic selection),
+      // go-to-symbol with Command — flash both, stay quiet for mouse/keyboard
+      if (
+        e.kind === vscode.TextEditorSelectionChangeKind.Mouse ||
+        e.kind === vscode.TextEditorSelectionChangeKind.Keyboard
+      ) return;
+      if (!isPlanDoc(e.textEditor.document)) return;
+      const line = e.selections[0].active.line;
+      const range = new vscode.Range(line, 0, line, e.textEditor.document.lineAt(line).text.length);
+      e.textEditor.setDecorations(flashType, [range]);
+      // single-click outline navigation leaves focus in the outline tree;
+      // pull it into the editor so the caret is visible at the target
+      vscode.window.showTextDocument(e.textEditor.document, {
+        viewColumn: e.textEditor.viewColumn,
+        preserveFocus: false,
+        selection: e.selections[0],
+      });
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => {
+        if (vscode.window.visibleTextEditors.includes(e.textEditor)) {
+          e.textEditor.setDecorations(flashType, []);
+        }
+      }, 800);
+    }),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) updateDecorations(editor);
+      updateAddressItem(editor);
     }),
     vscode.window.onDidChangeVisibleTextEditors(updateVisibleEditors),
     vscode.workspace.onDidOpenTextDocument(updateVisibleEditors)
@@ -357,6 +486,8 @@ function activate(context) {
   );
 
   updateVisibleEditors();
+  updateAddressItem(vscode.window.activeTextEditor);
+  for (const doc of vscode.workspace.textDocuments) promoteIfPlan(doc);
 }
 
 function deactivate() {}

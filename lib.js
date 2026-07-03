@@ -108,23 +108,89 @@ function parsePlanStructure(lines) {
 
 const OUTPUT_LINE_RE = /^\s{0,3}([+~-]|-\/\+)\s+(\w+)\s+=/;
 
-// Build document-symbol descriptors: resource blocks (range spans the block,
-// trailing blanks trimmed), the outputs section with one child per output,
-// and the "Plan: N to add..." summary.
+// block ends at the next header, the outputs section, or the summary
+// line — whichever comes first — with trailing blanks trimmed
+function blockEnd(headers, k, outputsLine, planLine, lines) {
+  const { line } = headers[k];
+  let end = k + 1 < headers.length ? headers[k + 1].line - 1 : lines.length - 1;
+  if (outputsLine > line && outputsLine - 1 < end) end = outputsLine - 1;
+  if (planLine > line && planLine - 1 < end) end = planLine - 1;
+  while (end > line && lines[end].trim() === '') end--;
+  return end;
+}
+
+// Split a resource address into module segments plus the resource leaf,
+// e.g. module.a.module.b[0].aws_x.y -> ['module.a', 'module.b[0]', 'aws_x.y'].
+// Dots inside brackets or quotes (index keys) do not split.
+function splitAddress(address) {
+  const parts = [];
+  let cur = '';
+  let depth = 0;
+  let quote = null;
+  for (const ch of address) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === '[') depth++;
+    if (ch === ']') depth--;
+    if (ch === '.' && depth === 0) {
+      parts.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  parts.push(cur);
+
+  const segments = [];
+  let i = 0;
+  while (i + 1 < parts.length && parts[i] === 'module') {
+    segments.push(`${parts[i]}.${parts[i + 1]}`);
+    i += 2;
+  }
+  const leaf = parts.slice(i).join('.');
+  if (leaf) segments.push(leaf);
+  return segments;
+}
+
+// Build document-symbol descriptors: resources nested under their module
+// chain (so breadcrumbs show short per-level crumbs instead of one truncated
+// address), the outputs section with one child per output, and the
+// "Plan: N to add..." summary. Block ranges trim trailing blank lines;
+// module ranges span their children.
 function planSymbols(lines) {
   const { headers, outputsLine, planLine } = parsePlanStructure(lines);
   const symbols = [];
 
   for (let k = 0; k < headers.length; k++) {
     const { line, address, action } = headers[k];
-    let end = k + 1 < headers.length ? headers[k + 1].line - 1 : lines.length - 1;
-    if (outputsLine > line && (k + 1 >= headers.length || outputsLine < headers[k + 1].line)) {
-      end = outputsLine - 1;
+    // a block absorbing the summary would overlap the summary symbol and
+    // break outline navigation — blockEnd guards against that
+    const end = blockEnd(headers, k, outputsLine, planLine, lines);
+
+    const segments = splitAddress(address);
+    let list = symbols;
+    for (const seg of segments.slice(0, -1)) {
+      let node = list.find((n) => n.type === 'module' && n.name === seg);
+      if (!node) {
+        node = { type: 'module', name: seg, startLine: line, endLine: end, children: [] };
+        list.push(node);
+      }
+      node.startLine = Math.min(node.startLine, line);
+      node.endLine = Math.max(node.endLine, end);
+      list = node.children;
     }
-    while (end > line && lines[end].trim() === '') end--;
-    symbols.push({
+    list.push({
       type: 'resource',
-      name: `${ACTION_MARKER[action]} ${address}`,
+      name: `${ACTION_MARKER[action]} ${segments[segments.length - 1]}`,
+      address,
       detail: action,
       action,
       startLine: line,
@@ -156,6 +222,70 @@ function planSymbols(lines) {
   return symbols;
 }
 
+// Resolve which resource block a line belongs to (header line included).
+function resourceAtLine(lines, lineNo) {
+  const { headers, outputsLine, planLine } = parsePlanStructure(lines);
+  for (let k = headers.length - 1; k >= 0; k--) {
+    const h = headers[k];
+    if (h.line <= lineNo) {
+      const end = blockEnd(headers, k, outputsLine, planLine, lines);
+      return lineNo <= end ? { address: h.address, action: h.action } : null;
+    }
+  }
+  return null;
+}
+
+// Folding ranges: each resource block folds from its HEADER line (so sticky
+// scroll pins the current resource's header), plus the outputs section and
+// inner attribute blocks (indent >= 4). Deliberately no region for the
+// top-level "Terraform will perform..." umbrella — with indentation-based
+// folding it would sit in sticky scroll forever as a stale first line.
+function foldingRanges(lines) {
+  const { headers, outputsLine, planLine } = parsePlanStructure(lines);
+  const ranges = [];
+
+  for (let k = 0; k < headers.length; k++) {
+    const { line } = headers[k];
+    const end = blockEnd(headers, k, outputsLine, planLine, lines);
+    if (end <= line) continue;
+    ranges.push({ start: line, end });
+    // nested region from the body opening line (first non-comment line after
+    // the header comments) so sticky shows header + `~ resource ... {`
+    for (let i = line + 1; i <= end; i++) {
+      if (!lines[i].trim() || /^\s*#/.test(lines[i])) continue;
+      if (i < end) ranges.push({ start: i, end });
+      break;
+    }
+  }
+
+  if (outputsLine >= 0) {
+    let end = planLine > outputsLine ? planLine - 1 : lines.length - 1;
+    while (end > outputsLine && lines[end].trim() === '') end--;
+    if (end > outputsLine) ranges.push({ start: outputsLine, end });
+  }
+
+  // inner blocks by indentation; indent >= 4 keeps resource/header-level
+  // lines out (their folding comes from the header regions above)
+  const stack = []; // { line, indent }
+  let lastNonBlank = -1;
+  const closeTo = (indent) => {
+    while (stack.length && stack[stack.length - 1].indent >= indent) {
+      const r = stack.pop();
+      if (r.indent >= 4 && lastNonBlank > r.line) ranges.push({ start: r.line, end: lastNonBlank });
+    }
+  };
+  lines.forEach((text, i) => {
+    if (!text.trim()) return;
+    const indent = text.match(/^\s*/)[0].length;
+    closeTo(indent);
+    stack.push({ line: i, indent });
+    lastNonBlank = i;
+  });
+  closeTo(0);
+
+  return ranges;
+}
+
 module.exports = {
   ACTION_MARKER,
   HEADER_RE,
@@ -167,5 +297,8 @@ module.exports = {
   timestampPlanName,
   buildRenderError,
   parsePlanStructure,
+  splitAddress,
   planSymbols,
+  foldingRanges,
+  resourceAtLine,
 };

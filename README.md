@@ -1,8 +1,7 @@
 # Terraform Plan Colors
 
 Colorizes saved `terraform plan` output — text files (e.g. `2026.5.7.2230.tfplan`,
-`plan-2026.5.7.2230.txt`, `prod.tfplan.txt`) and binary plans, rendered on open
-via `terraform show`.
+`prod.tfplan.txt`) and binary plans, rendered on open via `terraform show`.
 
 ```sh
 terraform plan -out=tfplan
@@ -33,29 +32,68 @@ Extras:
 
 ## Navigation
 
-Each resource block becomes a document symbol:
-- **Outline view** — clickable list of all resources with `+ ~ - -/+ <=` prefixes
-- **Ctrl/Cmd+Shift+O** — jump to any resource by fuzzy address
-- **Breadcrumbs / sticky scroll** — show the current resource while scrolling
+Each resource block becomes a document symbol, nested under its module chain
+(`module.pipelines` → `module.ecs_service[0]` → `~ aws_ecs_service.this`):
+
+- **Outline view** — module-grouped tree of all resources with `+ ~ - -/+ <=`
+  prefixes; clicking navigates, flashes the target line, and focuses the
+  editor with the cursor on the resource header.
+- **Ctrl/Cmd+Shift+O** — jump to any resource by fuzzy address.
+- **Breadcrumbs** — one short crumb per module level instead of a single
+  truncated address (the file path is reduced to the filename to make room).
+- **Sticky scroll** — pins the current resource's `#` header plus the
+  `resource ... {` line while you scroll through its body, driven by the
+  extension's folding ranges.
 - `Changes to Outputs` and the final `Plan: N to add...` line are symbols too.
 
-Folding works off indentation, so resource bodies are collapsible.
+Resource blocks fold from their header line; inner attribute blocks fold too.
+
+### Resource address in the status bar
+
+Deeply nested addresses don't fit in sticky scroll or breadcrumbs, so the
+full address of the resource at the cursor lives in the status bar
+(bottom right):
+
+- shown left-truncated (`…module.game[0].aws_x.this`) so the leaf stays visible
+- **hover** for the complete untruncated address
+- **click** to copy the address to the clipboard (for `terraform state`,
+  `-target=...`, etc.) — also in the palette as
+  `Terraform Plan: Copy Resource Address at Cursor`
+- hidden while the cursor is outside any resource block
+
+### Editor defaults
+
+These are applied as defaults for `terraform-plan` documents only, and can be
+overridden in your settings under `"[terraform-plan]"`:
+
+| Setting | Default | Why |
+|---------|---------|-----|
+| `editor.wordWrap` | `on` | long header/ARN lines stay fully visible |
+| `editor.stickyScroll.defaultModel` | `foldingProviderModel` | sticky pins resource headers, not the file-top umbrella |
+| `editor.renderLineHighlight` | `all` | the cursor line is obvious after an outline jump |
+| `breadcrumbs.filePath` | `last` | more room for module crumbs |
 
 ## File detection
 
-Files matching `*tfplan*` (any name containing it), `*plan*.txt`, or
-`*.tfplan.txt` get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
+Files with `tfplan` anywhere in the name get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
 the icon theme's text-file icon, while `.tfplan` files show this extension's
 own file icon.
-Plain `.txt` files are also content-sniffed (first lines starting with
-`Terraform used the selected providers...`). You can always set the language
-manually to `Terraform Plan`.
+Plain-text files with any other name are content-sniffed: when the first
+lines look like plan output (`Terraform used the selected providers...`),
+the document is automatically switched to the `Terraform Plan` language, so
+the full feature set applies regardless of filename. You can always set the
+language manually too.
 
 ## Binary plans
 
-Opening a *binary* plan (`terraform plan -out=...`, detected by zip magic
-bytes in any `*tfplan*` file) renders it through `terraform show -no-color`
-into a readonly colorized preview instead of VSCode's "file is binary" notice.
+Opening a *binary* plan (`terraform plan -out=...`) renders it through
+`terraform show -no-color` into a readonly colorized preview instead of
+VSCode's "file is binary" notice. Auto-preview applies to binary-shaped
+names — containing `tfplan` but not ending in `.tfplan` (e.g. `tfplan`,
+`tfplan.bin`, `prod-tfplan`); the `.tfplan` extension is reserved for text
+snapshots so their editors keep full text semantics. Any other `*tfplan*`
+file can be previewed via right-click → **Reopen Editor With… →
+Terraform Plan Preview**.
 This requires `terraform` on PATH and works when the plan file sits inside its
 stack folder (an initialized working directory — the normal case); otherwise
 the preview shows terraform's error. Text `*tfplan*` files open as regular
@@ -106,14 +144,18 @@ copy the editor loads:
 2. Run `make uninstall` — wipes the extension from VSCode and Antigravity.
 3. Relaunch the editors.
 
-Then build the package and install it from the Extensions view:
+Then, for EVERY code change, run the full three-step cycle:
 
-```sh
-make package   # produces tfplan-colors.vsix
-```
+1. `make package` — builds a fresh `tfplan-colors.vsix` (and runs the tests)
+2. Extensions view → `⋯` menu → **Install from VSIX…** → pick `tfplan-colors.vsix`
+   (no uninstall needed — installing replaces the existing copy, even at the
+   same version)
+3. **Developer: Reload Window**
 
-Extensions view → `⋯` menu → **Install from VSIX…** → pick `tfplan-colors.vsix`,
-then reload the editor.
+Skipping any step means testing stale code: the editor keeps running the old
+build until reload, and an old `.vsix` silently reinstalls the previous code.
+When in doubt whether a fix is actually installed, check the extension folder
+(`~/.antigravity-ide/extensions/` or `~/.vscode/extensions/`) for the change.
 
 For quick iteration without installing: open this folder in VSCode and press
 F5 (Extension Development Host).

@@ -9,7 +9,10 @@ const {
   timestampPlanName,
   buildRenderError,
   parsePlanStructure,
+  splitAddress,
   planSymbols,
+  foldingRanges,
+  resourceAtLine,
 } = require('../lib');
 
 // Sanitized composite of real terraform plan output, covering every marker
@@ -260,15 +263,53 @@ describe('parsePlanStructure', () => {
   });
 });
 
+describe('splitAddress', () => {
+  const cases = [
+    ['aws_instance.web', ['aws_instance.web']],
+    ['module.app.data.aws_ami.base', ['module.app', 'data.aws_ami.base']],
+    [
+      'module.pipelines.module.ecs_service_production[0].aws_appautoscaling_target.this',
+      ['module.pipelines', 'module.ecs_service_production[0]', 'aws_appautoscaling_target.this'],
+    ],
+    ['module.m.aws_x.y["key.with.dots"]', ['module.m', 'aws_x.y["key.with.dots"]']],
+    ['module.a.module.b.module.c.aws_x.y', ['module.a', 'module.b', 'module.c', 'aws_x.y']],
+    ['terraform_data.trigger', ['terraform_data.trigger']],
+  ];
+  for (const [address, expected] of cases) {
+    test(address, () => {
+      assert.deepEqual(splitAddress(address), expected);
+    });
+  }
+});
+
 describe('planSymbols', () => {
   const symbols = planSymbols(PLAN);
 
-  test('resource symbols carry marker-prefixed names and block ranges', () => {
-    const resources = symbols.filter((x) => x.type === 'resource');
+  function flattenResources(list) {
+    const out = [];
+    for (const n of list) {
+      if (n.type === 'resource') out.push(n);
+      if (n.type === 'module') out.push(...flattenResources(n.children));
+    }
+    return out;
+  }
+
+  test('module-scoped resource nests under its module node', () => {
+    const mod = symbols.find((x) => x.type === 'module');
+    assert.equal(mod.name, 'module.app');
+    assert.equal(mod.startLine, 9);
+    assert.equal(mod.endLine, 13);
     assert.deepEqual(
-      resources.map((r) => [r.name, r.startLine, r.endLine]),
+      mod.children.map((c) => [c.name, c.startLine, c.endLine]),
+      [['<= data.aws_ami.base', 9, 13]]
+    );
+  });
+
+  test('resource symbols carry marker-prefixed leaf names and block ranges', () => {
+    assert.deepEqual(
+      flattenResources(symbols).map((r) => [r.name, r.startLine, r.endLine]),
       [
-        ['<= module.app.data.aws_ami.base', 9, 13],
+        ['<= data.aws_ami.base', 9, 13],
         ['+ aws_instance.web', 15, 18],
         ['- aws_instance.old', 20, 23],
         ['-/+ aws_security_group.sg', 25, 31],
@@ -278,9 +319,13 @@ describe('planSymbols', () => {
     );
   });
 
-  test('resource detail is the action', () => {
-    const detail = symbols.filter((x) => x.type === 'resource').map((r) => r.detail);
-    assert.deepEqual(detail, ['read', 'create', 'destroy', 'replace', 'update', 'forget']);
+  test('resources keep the full address and action detail', () => {
+    const resources = flattenResources(symbols);
+    assert.equal(resources[0].address, 'module.app.data.aws_ami.base');
+    assert.deepEqual(
+      resources.map((r) => r.detail),
+      ['read', 'create', 'destroy', 'replace', 'update', 'forget']
+    );
   });
 
   test('outputs section symbol with one child per output', () => {
@@ -303,22 +348,21 @@ describe('planSymbols', () => {
     assert.equal(summary.line, 48);
   });
 
-  test('symbols keep document order: resources, outputs, summary', () => {
+  test('symbols keep document order: module, resources, outputs, summary', () => {
     assert.deepEqual(
       symbols.map((x) => x.type),
-      ['resource', 'resource', 'resource', 'resource', 'resource', 'resource', 'outputs', 'summary']
+      ['module', 'resource', 'resource', 'resource', 'resource', 'resource', 'outputs', 'summary']
     );
   });
 
-  test('plan without outputs or summary yields only resources', () => {
-    const symbolsNoOutputs = planSymbols(PLAN.slice(0, 42));
+  test('plan without outputs or summary yields only resource tree', () => {
+    const noOutputs = planSymbols(PLAN.slice(0, 42));
     assert.deepEqual(
-      symbolsNoOutputs.map((x) => x.type),
-      ['resource', 'resource', 'resource', 'resource', 'resource', 'resource']
+      noOutputs.map((x) => x.type),
+      ['module', 'resource', 'resource', 'resource', 'resource', 'resource']
     );
     // last block now trims to its closing brace before the trailing blank
-    const last = symbolsNoOutputs[symbolsNoOutputs.length - 1];
-    assert.equal(last.endLine, 41);
+    assert.equal(noOutputs[noOutputs.length - 1].endLine, 41);
   });
 
   test('empty input yields no symbols', () => {
@@ -331,5 +375,111 @@ describe('planSymbols', () => {
       planSymbols(['No changes. Your infrastructure matches the configuration.']),
       []
     );
+  });
+});
+
+describe('foldingRanges', () => {
+  const ranges = foldingRanges(PLAN);
+  const has = (start, end) => ranges.some((r) => r.start === start && r.end === end);
+
+  test('each resource block folds from its header line', () => {
+    assert.ok(has(9, 13));
+    assert.ok(has(15, 18));
+    assert.ok(has(20, 23));
+    assert.ok(has(25, 31));
+    assert.ok(has(33, 36));
+    assert.ok(has(38, 41));
+  });
+
+  test('outputs section folds', () => {
+    assert.ok(has(43, 46));
+  });
+
+  test('inner attribute blocks fold', () => {
+    // tags list inside the replace block (lines 28-30)
+    assert.ok(ranges.some((r) => r.start === 28));
+  });
+
+  test('no region starts at the top-level umbrella lines', () => {
+    assert.equal(ranges.some((r) => r.start === 0), false);
+    assert.equal(ranges.some((r) => r.start === 7), false);
+  });
+
+  test('resource body opening lines fold too (second sticky level)', () => {
+    assert.ok(has(11, 13)); // <= data "aws_ami" "base" {
+    assert.ok(has(16, 18)); // + resource "aws_instance" "web" {
+    assert.ok(has(26, 31)); // -/+ resource "aws_security_group" "sg" {
+    assert.ok(has(40, 41)); // . resource "aws_kms_alias" "k" {
+  });
+
+  test('empty input yields no ranges', () => {
+    assert.deepEqual(foldingRanges([]), []);
+  });
+});
+
+describe('resourceAtLine', () => {
+  test('header line resolves to its own resource', () => {
+    assert.deepEqual(resourceAtLine(PLAN, 15), { address: 'aws_instance.web', action: 'create' });
+  });
+  test('line inside a block resolves to the enclosing resource', () => {
+    assert.deepEqual(resourceAtLine(PLAN, 29), { address: 'aws_security_group.sg', action: 'replace' });
+    assert.deepEqual(resourceAtLine(PLAN, 12), { address: 'module.app.data.aws_ami.base', action: 'read' });
+  });
+  test('lines outside any block resolve to null', () => {
+    assert.equal(resourceAtLine(PLAN, 0), null);   // legend
+    assert.equal(resourceAtLine(PLAN, 14), null);  // blank between blocks
+    assert.equal(resourceAtLine(PLAN, 44), null);  // outputs section
+    assert.equal(resourceAtLine(PLAN, 48), null);  // summary
+  });
+});
+
+describe('planSymbols nesting', () => {
+  const NESTED = [
+    /* 0*/ '  # module.a.module.b.aws_x.one will be created',
+    /* 1*/ '  + resource "aws_x" "one" {',
+    /* 2*/ '    }',
+    /* 3*/ '',
+    /* 4*/ '  # module.a.module.b.aws_x.two will be destroyed',
+    /* 5*/ '  - resource "aws_x" "two" {',
+    /* 6*/ '    }',
+    /* 7*/ '',
+    /* 8*/ '  # module.a.aws_y.z will be updated in-place',
+    /* 9*/ '  ~ resource "aws_y" "z" {',
+    /*10*/ '    }',
+  ];
+  const symbols = planSymbols(NESTED);
+
+  test('same module chain groups into one node', () => {
+    assert.equal(symbols.length, 1);
+    const a = symbols[0];
+    assert.equal(a.name, 'module.a');
+    assert.deepEqual(a.children.map((c) => [c.type, c.name]), [
+      ['module', 'module.b'],
+      ['resource', '~ aws_y.z'],
+    ]);
+    const b = a.children[0];
+    assert.deepEqual(b.children.map((c) => c.name), ['+ aws_x.one', '- aws_x.two']);
+  });
+
+  test('module ranges span their children', () => {
+    const a = symbols[0];
+    const b = a.children[0];
+    assert.equal(b.startLine, 0);
+    assert.equal(b.endLine, 6);
+    assert.equal(a.startLine, 0);
+    assert.equal(a.endLine, 10);
+  });
+
+  test('last block stops before the summary when there is no outputs section', () => {
+    // mirrors real plans: module resources, no outputs, Plan line at EOF —
+    // the last block must not absorb the summary (breaks outline navigation)
+    const withSummary = [...NESTED, '', 'Plan: 1 to add, 1 to change, 1 to destroy.'];
+    const syms = planSymbols(withSummary);
+    const a = syms[0];
+    assert.equal(a.endLine, 10);
+    assert.equal(a.children[1].endLine, 10);
+    const summary = syms.find((x) => x.type === 'summary');
+    assert.equal(summary.line, 12);
+    assert.ok(a.endLine < summary.line);
   });
 });

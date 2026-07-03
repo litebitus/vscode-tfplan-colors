@@ -24,12 +24,25 @@
     "onLanguage:plaintext"
   ],
   "contributes": {
+    "configurationDefaults": {
+      "[terraform-plan]": {
+        "editor.wordWrap": "on",
+        "editor.stickyScroll.defaultModel": "foldingProviderModel",
+        "editor.renderLineHighlight": "all",
+        "breadcrumbs.filePath": "last"
+      }
+    },
     "commands": [
       {
         "command": "tfplanColors.saveRenderedPlan",
         "title": "Save Rendered Plan As…",
         "category": "Terraform Plan",
         "icon": "$(save-as)"
+      },
+      {
+        "command": "tfplanColors.copyResourceAddress",
+        "title": "Copy Resource Address at Cursor",
+        "category": "Terraform Plan"
       }
     ],
     "menus": {
@@ -53,10 +66,29 @@
         "displayName": "Terraform Plan",
         "selector": [
           {
-            "filenamePattern": "*tfplan*"
+            "filenamePattern": "**/tfplan"
+          },
+          {
+            "filenamePattern": "**/tfplan.*"
+          },
+          {
+            "filenamePattern": "**/*-tfplan"
+          },
+          {
+            "filenamePattern": "**/*_tfplan"
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "tfplanColors.binaryPlanOptional",
+        "displayName": "Terraform Plan Preview",
+        "selector": [
+          {
+            "filenamePattern": "*tfplan*"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "languages": [
@@ -69,8 +101,6 @@
           ".tfplan"
         ],
         "filenamePatterns": [
-          "*plan*.txt",
-          "*.tfplan.txt",
           "*tfplan*"
         ],
         "firstLine": "^Terraform (used the selected providers|will perform)",
