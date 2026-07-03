@@ -1,13 +1,18 @@
 # Terraform Plan Colors
 
-Colorizes saved `terraform plan` output text files (e.g. `2026.5.7.2230.tfplan`,
-`plan-2026.5.7.2230.txt`, `prod.tfplan.txt`).
+Colorizes saved `terraform plan` output — text files (e.g. `2026.5.7.2230.tfplan`,
+`plan-2026.5.7.2230.txt`, `prod.tfplan.txt`) and binary plans, rendered on open
+via `terraform show`.
 
 ```sh
 terraform plan -out=tfplan
-terraform show tfplan -no-color > $(date +%Y.%-m.%-d.%H%M).tfplan
-# extension colorizes the tfplan in IDE
-# commit the plan for record if desired
+# open the binary tfplan directly — the extension renders it via
+# `terraform show` into a colorized readonly preview
+
+# or save a text snapshot yourself...
+terraform show -no-color tfplan > $(date +%Y.%-m.%-d.%H%M).tfplan
+# ...or use "Save Rendered Plan As…" from the preview;
+# the text plan is colorized too — commit it for record if desired
 ```
 
 ## Colors
@@ -38,33 +43,45 @@ Folding works off indentation, so resource bodies are collapsible.
 
 ## File detection
 
-Files with a `.tfplan` extension, or matching `*plan*.txt` or `*.tfplan.txt`,
-get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
+Files matching `*tfplan*` (any name containing it), `*plan*.txt`, or
+`*.tfplan.txt` get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
 the icon theme's text-file icon, while `.tfplan` files show this extension's
 own file icon.
 Plain `.txt` files are also content-sniffed (first lines starting with
 `Terraform used the selected providers...`). You can always set the language
 manually to `Terraform Plan`.
 
-## Install (local, no marketplace)
+## Binary plans
 
-Symlink the repo into your editor's extensions directory, from the repo root:
+Opening a *binary* plan (`terraform plan -out=...`, detected by zip magic
+bytes in any `*tfplan*` file) renders it through `terraform show -no-color`
+into a readonly colorized preview instead of VSCode's "file is binary" notice.
+This requires `terraform` on PATH and works when the plan file sits inside its
+stack folder (an initialized working directory — the normal case); otherwise
+the preview shows terraform's error. Text `*tfplan*` files open as regular
+text documents, unaffected.
 
-**VSCode:**
+The rendered preview can be saved as a text snapshot via the save icon in the
+editor title (or `Terraform Plan: Save Rendered Plan As…`) — the save dialog
+defaults to `<timestamp>.tfplan` (e.g. `2026.7.3.1415.tfplan`) next to the
+binary plan.
+
+## Local testing
+
+First uninstall the marketplace version if present — with equal versions it's
+undefined which copy the editor loads.
+
+Then build the package and install it from the Extensions view:
 
 ```sh
-ln -s "$(pwd)" ~/.vscode/extensions/lite2073.tfplan-colors
+make package   # produces tfplan-colors.vsix
 ```
 
-**Antigravity:**
+Extensions view → `⋯` menu → **Install from VSIX…** → pick `tfplan-colors.vsix`,
+then reload the editor.
 
-```sh
-ln -s "$(pwd)" ~/.antigravity-ide/extensions/lite2073.tfplan-colors
-```
-
-Then reload the editor (`Developer: Reload Window`).
-
-To develop: open this folder in VSCode and press F5 (Extension Development Host).
+For quick iteration without installing: open this folder in VSCode and press
+F5 (Extension Development Host).
 
 ## Publish
 

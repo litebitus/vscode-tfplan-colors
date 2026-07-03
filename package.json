@@ -1,7 +1,7 @@
 {
   "name": "tfplan-colors",
   "displayName": "Terraform Plan Colors",
-  "description": "Colorize saved terraform plan output (.tfplan | .txt): actions, gutter bars, and outline navigation",
+  "description": "Colorize saved terraform plan output, text or binary (rendered via terraform show): actions, gutter bars, and outline navigation",
   "version": "0.1.6",
   "publisher": "lite2073",
   "license": "MIT",
@@ -24,6 +24,41 @@
     "onLanguage:plaintext"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "tfplanColors.saveRenderedPlan",
+        "title": "Save Rendered Plan As…",
+        "category": "Terraform Plan",
+        "icon": "$(save-as)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "tfplanColors.saveRenderedPlan",
+          "when": "resourceScheme == tfplan-show",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "tfplanColors.saveRenderedPlan",
+          "when": "resourceScheme == tfplan-show"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "tfplanColors.binaryPlan",
+        "displayName": "Terraform Plan",
+        "selector": [
+          {
+            "filenamePattern": "*tfplan*"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "languages": [
       {
         "id": "terraform-plan",
@@ -35,7 +70,8 @@
         ],
         "filenamePatterns": [
           "*plan*.txt",
-          "*.tfplan.txt"
+          "*.tfplan.txt",
+          "*tfplan*"
         ],
         "firstLine": "^Terraform (used the selected providers|will perform)",
         "icon": {

@@ -1,4 +1,7 @@
 const vscode = require('vscode');
+const cp = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 // Action colors — chosen to be readable on both dark and light themes.
 // replace uses magenta: the common convention for destroy-then-create.
@@ -229,6 +232,103 @@ class PlanSymbolProvider {
   }
 }
 
+// --- binary plan preview -----------------------------------------------
+// *tfplan* files are claimed by a custom editor so the open can be routed
+// by content: text plans bounce back to the regular text editor; binary
+// plans (terraform's plan format is a zip — "PK" magic) are rendered via
+// `terraform show -no-color` into a readonly virtual doc that gets the
+// terraform-plan language and therefore all the coloring above.
+
+const SHOW_SCHEME = 'tfplan-show';
+
+function isBinaryPlan(fsPath) {
+  const buf = Buffer.alloc(2);
+  const fd = fs.openSync(fsPath, 'r');
+  try {
+    fs.readSync(fd, buf, 0, 2, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return buf[0] === 0x50 && buf[1] === 0x4b;
+}
+
+class PlanShowProvider {
+  provideTextDocumentContent(uri) {
+    const file = uri.fsPath;
+    return new Promise((resolve) => {
+      // cwd must be the plan's stack folder: terraform show needs the
+      // initialized working directory (.terraform provider schemas)
+      cp.execFile(
+        'terraform',
+        ['show', '-no-color', file],
+        { cwd: path.dirname(file), maxBuffer: 64 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          if (!err) {
+            resolve(stdout);
+            return;
+          }
+          const hint = (stderr || '').includes('Failed to load plugin schemas')
+            ? 'Hint: the plan file is probably not inside its stack folder — the preview runs\n' +
+              'terraform show in the file\'s directory, which must be terraform-initialized\n' +
+              '(.terraform/ present with matching providers).\n\n'
+            : '';
+          resolve(`Failed to render plan with 'terraform show':\n\n${hint}${stderr || err.message}`);
+        }
+      );
+    });
+  }
+}
+
+class BinaryPlanEditorProvider {
+  async openCustomDocument(uri) {
+    return { uri, dispose() {} };
+  }
+
+  async resolveCustomEditor(document, panel) {
+    const uri = document.uri;
+    let binary = false;
+    try {
+      binary = isBinaryPlan(uri.fsPath);
+    } catch {
+      // unreadable/virtual — fall through to the text editor
+    }
+    const viewColumn = panel.viewColumn ?? vscode.ViewColumn.Active;
+    if (!binary) {
+      await vscode.commands.executeCommand('vscode.openWith', uri, 'default', viewColumn);
+      panel.dispose();
+      return;
+    }
+    panel.webview.html = '<html><body>Rendering plan with terraform show…</body></html>';
+    const doc = await vscode.workspace.openTextDocument(uri.with({ scheme: SHOW_SCHEME }));
+    await vscode.languages.setTextDocumentLanguage(doc, 'terraform-plan');
+    await vscode.window.showTextDocument(doc, { viewColumn });
+    panel.dispose();
+  }
+}
+
+// Default filename for saved renders, matching the dated snapshot
+// convention: 2026.5.14.2235.tfplan (month/day unpadded, HHmm padded).
+function timestampPlanName() {
+  const d = new Date();
+  const hhmm = String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.${hhmm}.tfplan`;
+}
+
+async function saveRenderedPlan() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.uri.scheme !== SHOW_SCHEME) {
+    vscode.window.showWarningMessage('No rendered terraform plan is active.');
+    return;
+  }
+  const target = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(path.dirname(editor.document.uri.fsPath), timestampPlanName())),
+    filters: { 'Terraform Plan': ['tfplan'] },
+  });
+  if (!target) return;
+  await vscode.workspace.fs.writeFile(target, Buffer.from(editor.document.getText(), 'utf8'));
+  await vscode.window.showTextDocument(target);
+}
+
 const SYMBOL_KINDS = {
   create:  vscode.SymbolKind.Constructor,
   update:  vscode.SymbolKind.Field,
@@ -246,6 +346,11 @@ function activate(context) {
       [{ language: 'terraform-plan' }, { language: 'plaintext' }],
       new PlanSymbolProvider()
     ),
+    vscode.workspace.registerTextDocumentContentProvider(SHOW_SCHEME, new PlanShowProvider()),
+    vscode.window.registerCustomEditorProvider('tfplanColors.binaryPlan', new BinaryPlanEditorProvider(), {
+      supportsMultipleEditorsPerDocument: false,
+    }),
+    vscode.commands.registerCommand('tfplanColors.saveRenderedPlan', saveRenderedPlan),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) updateDecorations(editor);
     }),
