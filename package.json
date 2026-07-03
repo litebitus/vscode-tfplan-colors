@@ -1,0 +1,33 @@
+{
+  "name": "tfplan-colors",
+  "displayName": "Terraform Plan Colors",
+  "description": "Colorize saved terraform plan output (.txt): actions, gutter bars, and outline navigation",
+  "version": "0.1.0",
+  "publisher": "teli",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:plaintext"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "terraform-plan",
+        "aliases": [
+          "Terraform Plan"
+        ],
+        "filenamePatterns": [
+          "*plan*.txt",
+          "*.tfplan.txt"
+        ],
+        "firstLine": "^Terraform (used the selected providers|will perform)",
+        "configuration": "./language-configuration.json"
+      }
+    ]
+  }
+}
