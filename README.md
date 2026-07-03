@@ -1,6 +1,7 @@
 # Terraform Plan Colors
 
-Colorizes saved `terraform plan` output text files (e.g. `plan-2026.5.7.2230.txt`).
+Colorizes saved `terraform plan` output text files (e.g. `2026.5.7.2230.tfplan`,
+`plan-2026.5.7.2230.txt`, `prod.tfplan.txt`).
 
 ## Colors
 
@@ -45,13 +46,13 @@ Symlink the repo into your editor's extensions directory, from the repo root:
 **VSCode:**
 
 ```sh
-ln -s "$(pwd)" ~/.vscode/extensions/lite2073.tfplan-colors-0.1.0
+ln -s "$(pwd)" ~/.vscode/extensions/lite2073.tfplan-colors
 ```
 
 **Antigravity:**
 
 ```sh
-ln -s "$(pwd)" ~/.antigravity-ide/extensions/lite2073.tfplan-colors-0.1.0
+ln -s "$(pwd)" ~/.antigravity-ide/extensions/lite2073.tfplan-colors
 ```
 
 Then reload the editor (`Developer: Reload Window`).
@@ -67,21 +68,17 @@ One-time setup:
 1. Publisher `lite2073` created at https://marketplace.visualstudio.com/manage
 2. Azure DevOps PAT (https://aex.dev.azure.com → user settings → Personal access tokens):
    scope **Marketplace → Manage**, organization **All accessible organizations**
-3. `npm i -g @vscode/vsce`
-4. `vsce login lite2073` (paste the PAT)
+3. Open VSX token from https://open-vsx.org (profile → Access Tokens),
+   exported as `OVSX_PAT` — Open VSX serves VSCode forks like Antigravity
+4. `npm i -g @vscode/vsce ovsx`
+5. `vsce login lite2073` (paste the PAT)
 
 Each release:
 
 ```sh
-vsce publish patch   # or minor/major — bumps version, packages, publishes
+make publish              # bump patch; publish to Open VSX + VS Code Marketplace; push tag
+make publish BUMP=minor   # bump minor instead
 ```
 
-Or bump `"version"` in package.json manually and run `vsce publish`.
-To only build the .vsix without publishing: `vsce package`.
-
-For VSCode forks (Antigravity, etc.) that use Open VSX instead of the MS marketplace:
-
-```sh
-npm i -g ovsx
-ovsx publish -p <open-vsx-token>   # token from open-vsx.org
-```
+To only build the .vsix without publishing: `make package`.
+To retry a single store for the current version: `make publish-ovsx` / `make publish-vsce`.
