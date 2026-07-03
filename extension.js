@@ -2,6 +2,14 @@ const vscode = require('vscode');
 const cp = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const {
+  scanLine,
+  planSymbols,
+  looksLikePlanText,
+  isZipMagic,
+  timestampPlanName,
+  buildRenderError,
+} = require('./lib');
 
 // Action colors — chosen to be readable on both dark and light themes.
 // replace uses magenta: the common convention for destroy-then-create.
@@ -12,15 +20,6 @@ const COLORS = {
   replace: '#DB61A2',
   read:    '#8B949E',
   forget:  '#8B949E',
-};
-
-const ACTION_MARKER = {
-  create:  '+',
-  update:  '~',
-  destroy: '-',
-  replace: '-/+',
-  read:    '<=',
-  forget:  '.',
 };
 
 function gutterIcon(color) {
@@ -63,45 +62,11 @@ function createDecorationTypes(context) {
   context.subscriptions.push(forcesType);
 }
 
-// Resource header, e.g.:
-//   # module.a.aws_x.y will be created
-//   # aws_x.y must be replaced
-//  # module.a.aws_x.y will no longer be managed by Terraform, ...
-const HEADER_RE = /^\s{0,3}# ([a-zA-Z][\w."'()\[\]/ -]*?) (will|must|is|has) (.+)$/;
-
-function headerAction(rest) {
-  if (rest.includes('be created')) return 'create';
-  if (rest.includes('be destroyed')) return 'destroy';
-  if (rest.includes('be updated')) return 'update';
-  if (rest.includes('be replaced')) return 'replace';
-  if (rest.includes('be read')) return 'read';
-  if (rest.includes('no longer be managed')) return 'forget';
-  return null;
-}
-
-// Diff marker at the start of a line (any indentation).
-function classifyLine(text) {
-  if (/^\s*-\/\+/.test(text)) return 'replace';
-  if (/^\s*\+\/-/.test(text)) return 'replace'; // create_before_destroy
-  if (/^\s*<=/.test(text)) return 'read';
-  const m = text.match(/^\s*([+~.-])\s/);
-  if (!m) return null;
-  switch (m[1]) {
-    case '+': return 'create';
-    case '-': return 'destroy';
-    case '~': return 'update';
-    case '.': return 'forget';
-  }
-  return null;
-}
-
 function isPlanDoc(doc) {
   if (doc.languageId === 'terraform-plan') return true;
   if (doc.languageId !== 'plaintext') return false;
   const head = doc.getText(new vscode.Range(0, 0, Math.min(doc.lineCount, 15), 0));
-  return /^Terraform (used the selected providers|will perform|planned the following)/m.test(head) ||
-         /Resource actions are\s*$/m.test(head) ||
-         /indicated with the following symbols/.test(head);
+  return looksLikePlanText(head);
 }
 
 function updateDecorations(editor) {
@@ -117,23 +82,15 @@ function updateDecorations(editor) {
   if (isPlanDoc(doc)) {
     for (let i = 0; i < doc.lineCount; i++) {
       const text = doc.lineAt(i).text;
+      const s = scanLine(text);
+      if (!s) continue;
       const range = new vscode.Range(i, 0, i, text.length);
-
-      const h = text.match(HEADER_RE);
-      if (h) {
-        const action = headerAction(h[3]);
-        if (action) {
-          headerBuckets[action].push(range);
-          continue;
-        }
-      }
-
-      const action = classifyLine(text);
-      if (action) {
-        lineBuckets[action].push(range);
-        const f = text.indexOf('# forces replacement');
-        if (f >= 0) {
-          forces.push(new vscode.Range(i, f, i, text.length));
+      if (s.kind === 'header') {
+        headerBuckets[s.action].push(range);
+      } else {
+        lineBuckets[s.action].push(range);
+        if (s.forcesIndex >= 0) {
+          forces.push(new vscode.Range(i, s.forcesIndex, i, text.length));
         }
       }
     }
@@ -155,81 +112,38 @@ function updateVisibleEditors() {
 class PlanSymbolProvider {
   provideDocumentSymbols(doc) {
     if (!isPlanDoc(doc)) return [];
-    const symbols = [];
-    const headers = []; // { line, address, action }
-
-    let outputsLine = -1;
-    let planLine = -1;
-    for (let i = 0; i < doc.lineCount; i++) {
-      const text = doc.lineAt(i).text;
-      const h = text.match(HEADER_RE);
-      if (h) {
-        const action = headerAction(h[3]);
-        if (action) headers.push({ line: i, address: h[1], action });
-        continue;
-      }
-      if (/^Changes to Outputs:/.test(text)) outputsLine = i;
-      if (/^Plan: /.test(text)) planLine = i;
-    }
-
-    for (let k = 0; k < headers.length; k++) {
-      const { line, address, action } = headers[k];
-      let end = k + 1 < headers.length ? headers[k + 1].line - 1 : doc.lineCount - 1;
-      if (outputsLine > line && (k + 1 >= headers.length || outputsLine < headers[k + 1].line)) {
-        end = outputsLine - 1;
-      }
-      while (end > line && doc.lineAt(end).text.trim() === '') end--;
-      const range = new vscode.Range(line, 0, end, doc.lineAt(end).text.length);
-      symbols.push(new vscode.DocumentSymbol(
-        `${ACTION_MARKER[action]} ${address}`,
-        action,
-        SYMBOL_KINDS[action],
-        range,
-        new vscode.Range(line, 0, line, doc.lineAt(line).text.length)
-      ));
-    }
-
-    if (outputsLine >= 0) {
-      let end = planLine > outputsLine ? planLine - 1 : doc.lineCount - 1;
-      while (end > outputsLine && doc.lineAt(end).text.trim() === '') end--;
-      const outputsSym = new vscode.DocumentSymbol(
-        'Changes to Outputs',
-        '',
-        vscode.SymbolKind.Namespace,
-        new vscode.Range(outputsLine, 0, end, doc.lineAt(end).text.length),
-        new vscode.Range(outputsLine, 0, outputsLine, doc.lineAt(outputsLine).text.length)
-      );
-      for (let i = outputsLine + 1; i <= end; i++) {
-        const text = doc.lineAt(i).text;
-        const m = text.match(/^\s{0,3}([+~-]|-\/\+)\s+(\w+)\s+=/);
-        if (m) {
-          const lineRange = new vscode.Range(i, 0, i, text.length);
-          outputsSym.children.push(new vscode.DocumentSymbol(
-            `${m[1]} ${m[2]}`,
-            'output',
-            vscode.SymbolKind.Variable,
-            lineRange,
-            lineRange
-          ));
-        }
-      }
-      symbols.push(outputsSym);
-    }
-
-    if (planLine >= 0) {
-      const text = doc.lineAt(planLine).text;
-      const lineRange = new vscode.Range(planLine, 0, planLine, text.length);
-      symbols.push(new vscode.DocumentSymbol(
-        text.trim(),
-        '',
-        vscode.SymbolKind.Event,
-        lineRange,
-        lineRange
-      ));
-    }
-
-    return symbols;
+    const lines = [];
+    for (let i = 0; i < doc.lineCount; i++) lines.push(doc.lineAt(i).text);
+    return planSymbols(lines).map((s) => toDocumentSymbol(s, lines));
   }
+}
+
+function toDocumentSymbol(s, lines) {
+  if (s.type === 'resource') {
+    return new vscode.DocumentSymbol(
+      s.name,
+      s.detail,
+      SYMBOL_KINDS[s.action],
+      new vscode.Range(s.startLine, 0, s.endLine, lines[s.endLine].length),
+      new vscode.Range(s.startLine, 0, s.startLine, lines[s.startLine].length)
+    );
+  }
+  if (s.type === 'outputs') {
+    const sym = new vscode.DocumentSymbol(
+      s.name,
+      '',
+      vscode.SymbolKind.Namespace,
+      new vscode.Range(s.startLine, 0, s.endLine, lines[s.endLine].length),
+      new vscode.Range(s.startLine, 0, s.startLine, lines[s.startLine].length)
+    );
+    sym.children = s.children.map((c) => {
+      const r = new vscode.Range(c.line, 0, c.line, lines[c.line].length);
+      return new vscode.DocumentSymbol(c.name, 'output', vscode.SymbolKind.Variable, r, r);
+    });
+    return sym;
+  }
+  const r = new vscode.Range(s.line, 0, s.line, lines[s.line].length);
+  return new vscode.DocumentSymbol(s.name, '', vscode.SymbolKind.Event, r, r);
 }
 
 // --- binary plan preview -----------------------------------------------
@@ -255,7 +169,7 @@ function isBinaryPlan(fsPath) {
   } finally {
     fs.closeSync(fd);
   }
-  return buf[0] === 0x50 && buf[1] === 0x4b;
+  return isZipMagic(buf);
 }
 
 class PlanShowProvider {
@@ -333,16 +247,7 @@ class PlanShowProvider {
         { cwd: path.dirname(file), maxBuffer: 64 * 1024 * 1024 },
         (err, stdout, stderr) => {
           log(`terraform show done: ${file} — ${err ? 'ERROR' : `${stdout.length} bytes`}`);
-          if (!err) {
-            resolve(stdout);
-            return;
-          }
-          const hint = (stderr || '').includes('Failed to load plugin schemas')
-            ? 'Hint: the plan file is probably not inside its stack folder — the preview runs\n' +
-              'terraform show in the file\'s directory, which must be terraform-initialized\n' +
-              '(.terraform/ present with matching providers).\n\n'
-            : '';
-          resolve(`Failed to render plan with 'terraform show':\n\n${hint}${stderr || err.message}`);
+          resolve(err ? buildRenderError(stderr, err.message) : stdout);
         }
       );
     });
@@ -386,14 +291,6 @@ class BinaryPlanEditorProvider {
     await vscode.window.showTextDocument(doc, { viewColumn });
     panel.dispose();
   }
-}
-
-// Default filename for saved renders, matching the dated snapshot
-// convention: 2026.5.14.2235.tfplan (month/day unpadded, HHmm padded).
-function timestampPlanName() {
-  const d = new Date();
-  const hhmm = String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
-  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.${hhmm}.tfplan`;
 }
 
 async function saveRenderedPlan() {

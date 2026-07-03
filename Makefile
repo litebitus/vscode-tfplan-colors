@@ -13,9 +13,12 @@ VERSION = $(shell node -p "require('./package.json').version")
 PUBLISHER = $(shell node -p "require('./package.json').publisher")
 EXT_ID = $(PUBLISHER).$(shell node -p "require('./package.json').name")
 
-.PHONY: package publish preflight bump push publish-ovsx publish-vsce uninstall
+.PHONY: test package publish preflight bump push publish-ovsx publish-vsce uninstall
 
-package:
+test:
+	node --test test/*.test.js
+
+package: test
 	vsce package -o $(VSIX)
 
 # Bump first (commit + tag, requires clean tree), then publish one identical

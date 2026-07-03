@@ -1,6 +1,7 @@
 .gitignore
 Makefile
 changelog.sh
+test/
 icon.svg
 *.vsix
 **/.DS_Store
