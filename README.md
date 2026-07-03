@@ -30,7 +30,10 @@ Folding works off indentation, so resource bodies are collapsible.
 
 ## File detection
 
-Files matching `*plan*.txt` or `*.tfplan.txt` get the `Terraform Plan` language.
+Files with a `.tfplan` extension, or matching `*plan*.txt` or `*.tfplan.txt`,
+get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
+the icon theme's text-file icon, while `.tfplan` files show this extension's
+own file icon.
 Plain `.txt` files are also content-sniffed (first lines starting with
 `Terraform used the selected providers...`). You can always set the language
 manually to `Terraform Plan`.

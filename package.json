@@ -27,6 +27,9 @@
         "aliases": [
           "Terraform Plan"
         ],
+        "extensions": [
+          ".tfplan"
+        ],
         "filenamePatterns": [
           "*plan*.txt",
           "*.tfplan.txt"
