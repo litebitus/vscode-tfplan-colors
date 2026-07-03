@@ -3,7 +3,12 @@
   "displayName": "Terraform Plan Colors",
   "description": "Colorize saved terraform plan output (.txt): actions, gutter bars, and outline navigation",
   "version": "0.1.0",
-  "publisher": "teli",
+  "publisher": "lite2073",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/litebitus/vscode-tfplan-colors.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

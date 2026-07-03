@@ -42,15 +42,43 @@ Symlink the repo into your editor's extensions directory, from the repo root:
 **VSCode:**
 
 ```sh
-ln -s "$(pwd)" ~/.vscode/extensions/teli.tfplan-colors-0.1.0
+ln -s "$(pwd)" ~/.vscode/extensions/lite2073.tfplan-colors-0.1.0
 ```
 
 **Antigravity:**
 
 ```sh
-ln -s "$(pwd)" ~/.antigravity-ide/extensions/teli.tfplan-colors-0.1.0
+ln -s "$(pwd)" ~/.antigravity-ide/extensions/lite2073.tfplan-colors-0.1.0
 ```
 
 Then reload the editor (`Developer: Reload Window`).
 
 To develop: open this folder in VSCode and press F5 (Extension Development Host).
+
+## Publish
+
+Marketplace listing: https://marketplace.visualstudio.com/items?itemName=lite2073.tfplan-colors
+
+One-time setup:
+
+1. Publisher `lite2073` created at https://marketplace.visualstudio.com/manage
+2. Azure DevOps PAT (https://aex.dev.azure.com → user settings → Personal access tokens):
+   scope **Marketplace → Manage**, organization **All accessible organizations**
+3. `npm i -g @vscode/vsce`
+4. `vsce login lite2073` (paste the PAT)
+
+Each release:
+
+```sh
+vsce publish patch   # or minor/major — bumps version, packages, publishes
+```
+
+Or bump `"version"` in package.json manually and run `vsce publish`.
+To only build the .vsix without publishing: `vsce package`.
+
+For VSCode forks (Antigravity, etc.) that use Open VSX instead of the MS marketplace:
+
+```sh
+npm i -g ovsx
+ovsx publish -p <open-vsx-token>   # token from open-vsx.org
+```
