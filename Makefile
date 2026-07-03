@@ -9,7 +9,7 @@
 BUMP ?= patch
 VSIX = tfplan-colors.vsix
 
-.PHONY: package publish bump publish-ovsx publish-vsce
+.PHONY: package publish preflight bump publish-ovsx publish-vsce
 
 package:
 	vsce package -o $(VSIX)
@@ -18,15 +18,18 @@ package:
 # .vsix to both stores. Open VSX goes first because it returns quickly; the
 # MS marketplace step can hang on validation polling — if it does, the upload
 # usually succeeded and Ctrl+C is safe (verify with: vsce show lite2073.tfplan-colors).
-publish: bump publish-ovsx publish-vsce
+# preflight runs before bump so a missing token can't strand a bumped version.
+publish: preflight bump publish-ovsx publish-vsce
+
+preflight:
+ifndef OVSX_PAT
+	$(error OVSX_PAT is not set — export your Open VSX token first)
+endif
 
 bump:
 	npm version $(BUMP)
 
-publish-ovsx: package
-ifndef OVSX_PAT
-	$(error OVSX_PAT is not set — export your Open VSX token first)
-endif
+publish-ovsx: package preflight
 	ovsx publish $(VSIX)
 
 publish-vsce: package
