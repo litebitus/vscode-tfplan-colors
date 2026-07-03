@@ -110,6 +110,10 @@ stack folder (an initialized working directory — the normal case); otherwise
 the preview shows terraform's error. Text `*tfplan*` files open as regular
 text documents, unaffected.
 
+The preview opens as a readonly `rendered-<name>.tfplan` tab and behaves
+like any text plan — colors, outline navigation, sticky scroll, status bar
+address all apply.
+
 The preview auto-refreshes while open: regenerate the plan
 (`terraform plan -out=...`) and the rendered view re-runs `terraform show`
 once the file settles.

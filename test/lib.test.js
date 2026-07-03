@@ -13,6 +13,8 @@ const {
   planSymbols,
   foldingRanges,
   resourceAtLine,
+  renderedPathFor,
+  planPathFrom,
 } = require('../lib');
 
 // Sanitized composite of real terraform plan output, covering every marker
@@ -414,6 +416,37 @@ describe('foldingRanges', () => {
 
   test('empty input yields no ranges', () => {
     assert.deepEqual(foldingRanges([]), []);
+  });
+});
+
+describe('rendered preview paths', () => {
+  // basename shapes claimed by the default-priority custom editor —
+  // a rendered path matching any of these re-enters the custom editor on
+  // generic opens and breaks outline navigation
+  const CLAIMS = [
+    (b) => b === 'tfplan',
+    (b) => b.startsWith('tfplan.'),
+    (b) => b.endsWith('-tfplan'),
+    (b) => b.endsWith('_tfplan'),
+  ];
+
+  const binaries = ['tfplan', 'tfplan.bin', 'prod-tfplan', 'prod_tfplan'];
+
+  for (const name of binaries) {
+    test(`rendered name for ${name} matches no default claim and ends in .tfplan`, () => {
+      const rendered = renderedPathFor(`/stack/dir/${name}`);
+      const base = rendered.slice(rendered.lastIndexOf('/') + 1);
+      assert.ok(base.endsWith('.tfplan'), base);
+      for (const claims of CLAIMS) assert.equal(claims(base), false, base);
+    });
+
+    test(`round-trips back to the plan path for ${name}`, () => {
+      assert.equal(planPathFrom(renderedPathFor(`/stack/dir/${name}`)), `/stack/dir/${name}`);
+    });
+  }
+
+  test('non-rendered paths pass through unchanged', () => {
+    assert.equal(planPathFrom('/stack/dir/tfplan'), '/stack/dir/tfplan');
   });
 });
 

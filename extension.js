@@ -12,6 +12,8 @@ const {
   isZipMagic,
   timestampPlanName,
   buildRenderError,
+  renderedPathFor,
+  planPathFrom,
 } = require('./lib');
 
 // Action colors — chosen to be readable on both dark and light themes.
@@ -188,18 +190,14 @@ function toDocumentSymbol(s, lines) {
 // terraform-plan language and therefore all the coloring above.
 
 const SHOW_SCHEME = 'tfplan-show';
-// preview paths get this suffix so they end in .tfplan — a path matching the
-// custom editor's binary-shaped default claim (e.g. bare `tfplan`) would make
-// generic re-opens (Outline clicks) hijack the preview and drop the selection
-const SHOW_SUFFIX = '.rendered.tfplan';
 
+// naming rationale lives with renderedPathFor/planPathFrom in lib.js
 function previewUriFor(uri) {
-  return uri.with({ scheme: SHOW_SCHEME, path: uri.path + SHOW_SUFFIX });
+  return uri.with({ scheme: SHOW_SCHEME, path: renderedPathFor(uri.path) });
 }
 
 function planPathFor(previewUri) {
-  const p = previewUri.fsPath;
-  return p.endsWith(SHOW_SUFFIX) ? p.slice(0, -SHOW_SUFFIX.length) : p;
+  return planPathFrom(previewUri.fsPath);
 }
 
 let logChannel;

@@ -23,7 +23,7 @@ test:
 test-all: test
 	npx vscode-test
 
-package: test
+package: test-all
 	vsce package -o $(VSIX)
 
 # Bump first (commit + tag, requires clean tree), then publish one identical

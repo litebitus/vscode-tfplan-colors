@@ -222,6 +222,29 @@ function planSymbols(lines) {
   return symbols;
 }
 
+// Preview path naming for rendered binary plans. The rendered path must:
+//  - end in .tfplan (gets the language; custom editors never claim *.tfplan)
+//  - NOT match any binary-shaped default claim (tfplan, tfplan.*, *-tfplan,
+//    *_tfplan) — otherwise generic re-opens (outline clicks) re-enter the
+//    custom editor and drop the selection
+// `rendered-<base>.tfplan` satisfies both for any base name.
+const RENDERED_PREFIX = 'rendered-';
+const RENDERED_EXT = '.tfplan';
+
+function renderedPathFor(planPath) {
+  const i = planPath.lastIndexOf('/');
+  return `${planPath.slice(0, i + 1)}${RENDERED_PREFIX}${planPath.slice(i + 1)}${RENDERED_EXT}`;
+}
+
+function planPathFrom(renderedPath) {
+  const i = renderedPath.lastIndexOf('/');
+  const base = renderedPath.slice(i + 1);
+  if (base.startsWith(RENDERED_PREFIX) && base.endsWith(RENDERED_EXT)) {
+    return renderedPath.slice(0, i + 1) + base.slice(RENDERED_PREFIX.length, -RENDERED_EXT.length);
+  }
+  return renderedPath;
+}
+
 // Resolve which resource block a line belongs to (header line included).
 function resourceAtLine(lines, lineNo) {
   const { headers, outputsLine, planLine } = parsePlanStructure(lines);
@@ -301,4 +324,6 @@ module.exports = {
   planSymbols,
   foldingRanges,
   resourceAtLine,
+  renderedPathFor,
+  planPathFrom,
 };
