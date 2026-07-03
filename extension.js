@@ -241,6 +241,12 @@ class PlanSymbolProvider {
 
 const SHOW_SCHEME = 'tfplan-show';
 
+let logChannel;
+function log(msg) {
+  if (!logChannel) logChannel = vscode.window.createOutputChannel('Terraform Plan Colors');
+  logChannel.appendLine(`[${new Date().toISOString()}] ${msg}`);
+}
+
 function isBinaryPlan(fsPath) {
   const buf = Buffer.alloc(2);
   const fd = fs.openSync(fsPath, 'r');
@@ -253,8 +259,71 @@ function isBinaryPlan(fsPath) {
 }
 
 class PlanShowProvider {
+  constructor() {
+    this._onDidChange = new vscode.EventEmitter();
+    this.onDidChange = this._onDidChange.event;
+    this._watchers = new Map(); // preview uri string -> disposable
+  }
+
+  // Auto-refresh: watch the binary plan while its preview is open and
+  // re-render when the file changes (e.g. terraform plan -out=... reruns).
+  // Uses VSCode's watcher (not Node fs.watch: macOS directory watching
+  // misses in-place rewrites); the debounce lets writes settle before
+  // terraform show runs again.
+  watch(previewUri) {
+    const key = previewUri.toString();
+    if (this._watchers.has(key)) return;
+    const file = previewUri.fsPath;
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file))
+    );
+    log(`watch attached: ${file}`);
+    let timer;
+    const refresh = (kind) => {
+      log(`watcher event (${kind}): ${file}`);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        log(`firing onDidChange: ${previewUri.toString()}`);
+        this._onDidChange.fire(previewUri);
+      }, 500);
+    };
+    watcher.onDidChange(() => refresh('change'));
+    watcher.onDidCreate(() => refresh('create'));
+    watcher.onDidDelete(() => refresh('delete'));
+    this._watchers.set(key, {
+      dispose: () => {
+        clearTimeout(timer);
+        watcher.dispose();
+      },
+    });
+  }
+
+  refresh(previewUri) {
+    log(`explicit refresh: ${previewUri.toString()}`);
+    this._onDidChange.fire(previewUri);
+  }
+
+  unwatch(previewUri) {
+    const key = previewUri.toString();
+    const w = this._watchers.get(key);
+    if (w) {
+      w.dispose();
+      this._watchers.delete(key);
+    }
+  }
+
+  dispose() {
+    for (const w of this._watchers.values()) w.dispose();
+    this._watchers.clear();
+    this._onDidChange.dispose();
+  }
+
   provideTextDocumentContent(uri) {
+    // attach here, not on open events: this runs for every render,
+    // including tabs restored on window reload where no open event fires
+    this.watch(uri);
     const file = uri.fsPath;
+    log(`render requested: ${file}`);
     return new Promise((resolve) => {
       // cwd must be the plan's stack folder: terraform show needs the
       // initialized working directory (.terraform provider schemas)
@@ -263,6 +332,7 @@ class PlanShowProvider {
         ['show', '-no-color', file],
         { cwd: path.dirname(file), maxBuffer: 64 * 1024 * 1024 },
         (err, stdout, stderr) => {
+          log(`terraform show done: ${file} — ${err ? 'ERROR' : `${stdout.length} bytes`}`);
           if (!err) {
             resolve(stdout);
             return;
@@ -280,6 +350,10 @@ class PlanShowProvider {
 }
 
 class BinaryPlanEditorProvider {
+  constructor(showProvider) {
+    this.showProvider = showProvider;
+  }
+
   async openCustomDocument(uri) {
     return { uri, dispose() {} };
   }
@@ -299,7 +373,15 @@ class BinaryPlanEditorProvider {
       return;
     }
     panel.webview.html = '<html><body>Rendering plan with terraform show…</body></html>';
-    const doc = await vscode.workspace.openTextDocument(uri.with({ scheme: SHOW_SCHEME }));
+    const previewUri = uri.with({ scheme: SHOW_SCHEME });
+    // VSCode caches closed virtual docs; if one is being revived, its content
+    // is stale (the plan may have changed while unwatched) — force a re-render
+    const cached = vscode.workspace.textDocuments.some(
+      (d) => d.uri.toString() === previewUri.toString()
+    );
+    log(`custom editor resolve: ${uri.fsPath} (binary, cached doc: ${cached})`);
+    const doc = await vscode.workspace.openTextDocument(previewUri);
+    if (cached) this.showProvider.refresh(previewUri);
     await vscode.languages.setTextDocumentLanguage(doc, 'terraform-plan');
     await vscode.window.showTextDocument(doc, { viewColumn });
     panel.dispose();
@@ -339,15 +421,21 @@ const SYMBOL_KINDS = {
 };
 
 function activate(context) {
+  log('extension activated');
   createDecorationTypes(context);
+  const showProvider = new PlanShowProvider();
 
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider(
       [{ language: 'terraform-plan' }, { language: 'plaintext' }],
       new PlanSymbolProvider()
     ),
-    vscode.workspace.registerTextDocumentContentProvider(SHOW_SCHEME, new PlanShowProvider()),
-    vscode.window.registerCustomEditorProvider('tfplanColors.binaryPlan', new BinaryPlanEditorProvider(), {
+    showProvider,
+    vscode.workspace.registerTextDocumentContentProvider(SHOW_SCHEME, showProvider),
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      if (doc.uri.scheme === SHOW_SCHEME) showProvider.unwatch(doc.uri);
+    }),
+    vscode.window.registerCustomEditorProvider('tfplanColors.binaryPlan', new BinaryPlanEditorProvider(showProvider), {
       supportsMultipleEditorsPerDocument: false,
     }),
     vscode.commands.registerCommand('tfplanColors.saveRenderedPlan', saveRenderedPlan),

@@ -11,8 +11,9 @@ VSIX = tfplan-colors.vsix
 # lazy (=) so it re-reads package.json after bump has run
 VERSION = $(shell node -p "require('./package.json').version")
 PUBLISHER = $(shell node -p "require('./package.json').publisher")
+EXT_ID = $(PUBLISHER).$(shell node -p "require('./package.json').name")
 
-.PHONY: package publish preflight bump push publish-ovsx publish-vsce
+.PHONY: package publish preflight bump push publish-ovsx publish-vsce uninstall
 
 package:
 	vsce package -o $(VSIX)
@@ -45,3 +46,31 @@ publish-ovsx: preflight package
 
 publish-vsce: preflight package
 	vsce publish --packagePath $(VSIX)
+
+# Strips this extension's entries from an editor's extensions.json — a wiped
+# folder with a live registry entry breaks reinstall ("restart the IDE before
+# reinstalling").
+define CLEAN_REGISTRY_JS
+const fs = require('fs');
+const file = process.argv[1];
+const entries = JSON.parse(fs.readFileSync(file));
+const keep = entries.filter(e => !JSON.stringify(e).includes('$(EXT_ID)'));
+fs.writeFileSync(file, JSON.stringify(keep));
+endef
+export CLEAN_REGISTRY_JS
+
+# Remove every installed copy from VSCode and Antigravity: CLI uninstall for
+# clean bookkeeping where available, wipe leftover folders (marketplace/local/
+# orphaned alike), and clean each registry. Never fails if nothing is
+# installed. Run with the editors closed: a running editor can rewrite
+# extensions.json from memory.
+uninstall:
+	-code --uninstall-extension $(EXT_ID) >/dev/null 2>&1 || true
+	-antigravity --uninstall-extension $(EXT_ID) >/dev/null 2>&1 || true
+	rm -rf ~/.vscode/extensions/$(EXT_ID)* \
+	       ~/.antigravity-ide/extensions/$(EXT_ID)*
+	@for f in ~/.vscode/extensions/extensions.json \
+	          ~/.antigravity-ide/extensions/extensions.json; do \
+	  if [ -f "$$f" ]; then node -e "$$CLEAN_REGISTRY_JS" "$$f" || true; fi; \
+	done
+	@echo "wiped $(EXT_ID) from VSCode and Antigravity — restart editors before reinstalling"

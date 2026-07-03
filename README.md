@@ -61,29 +61,18 @@ stack folder (an initialized working directory — the normal case); otherwise
 the preview shows terraform's error. Text `*tfplan*` files open as regular
 text documents, unaffected.
 
+The preview auto-refreshes while open: regenerate the plan
+(`terraform plan -out=...`) and the rendered view re-runs `terraform show`
+once the file settles.
+
 The rendered preview can be saved as a text snapshot via the save icon in the
 editor title (or `Terraform Plan: Save Rendered Plan As…`) — the save dialog
 defaults to `<timestamp>.tfplan` (e.g. `2026.7.3.1415.tfplan`) next to the
 binary plan.
 
-## Local testing
-
-First uninstall the marketplace version if present — with equal versions it's
-undefined which copy the editor loads.
-
-Then build the package and install it from the Extensions view:
-
-```sh
-make package   # produces tfplan-colors.vsix
-```
-
-Extensions view → `⋯` menu → **Install from VSIX…** → pick `tfplan-colors.vsix`,
-then reload the editor.
-
-For quick iteration without installing: open this folder in VSCode and press
-F5 (Extension Development Host).
-
 ## Publish
+
+Open VSX listing: https://open-vsx.org/extension/lite2073/tfplan-colors
 
 Marketplace listing: https://marketplace.visualstudio.com/items?itemName=lite2073.tfplan-colors
 
@@ -106,3 +95,25 @@ make publish BUMP=minor   # bump minor instead
 
 To only build the .vsix without publishing: `make package`.
 To retry a single store for the current version: `make publish-ovsx` / `make publish-vsce`.
+
+## Local testing
+
+First remove any installed copy — with equal versions it's undefined which
+copy the editor loads:
+
+1. Quit the editors (a running editor can rewrite the extension registry
+   from memory).
+2. Run `make uninstall` — wipes the extension from VSCode and Antigravity.
+3. Relaunch the editors.
+
+Then build the package and install it from the Extensions view:
+
+```sh
+make package   # produces tfplan-colors.vsix
+```
+
+Extensions view → `⋯` menu → **Install from VSIX…** → pick `tfplan-colors.vsix`,
+then reload the editor.
+
+For quick iteration without installing: open this folder in VSCode and press
+F5 (Extension Development Host).
