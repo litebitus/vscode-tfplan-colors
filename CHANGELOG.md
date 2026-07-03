@@ -1,3 +1,8 @@
+## 0.1.5 (2026-07-03)
+
+- feat: auto-generate changelog on version bump
+- docs: update README for .tfplan variants and make-based publishing
+
 ## 0.1.4 (2026-07-03)
 
 - feat: preflight checks git tree, vsce login, and OVSX_PAT before publish
