@@ -17,6 +17,9 @@
   ],
   "icon": "icon.png",
   "main": "./extension.js",
+  "scripts": {
+    "version": "sh ./changelog.sh && git add CHANGELOG.md"
+  },
   "activationEvents": [
     "onLanguage:plaintext"
   ],
