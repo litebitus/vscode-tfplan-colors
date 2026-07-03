@@ -32,6 +32,10 @@
           "*.tfplan.txt"
         ],
         "firstLine": "^Terraform (used the selected providers|will perform)",
+        "icon": {
+          "light": "./fileicon.svg",
+          "dark": "./fileicon.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ]
