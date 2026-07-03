@@ -1,3 +1,7 @@
+## 0.1.6 (2026-07-03)
+
+- docs: add usage example; mention .tfplan in description
+
 ## 0.1.5 (2026-07-03)
 
 - feat: auto-generate changelog on version bump
