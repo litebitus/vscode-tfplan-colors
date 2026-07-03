@@ -380,10 +380,12 @@ function activate(context) {
   const addressItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   addressItem.command = 'tfplanColors.copyResourceAddress';
   let currentAddress = null;
+  let addressItemVisible = false; // StatusBarItem has no readable visibility — track for tests
 
   function updateAddressItem(editor) {
     if (!editor || !isPlanDoc(editor.document)) {
       currentAddress = null;
+      addressItemVisible = false;
       addressItem.hide();
       return;
     }
@@ -392,6 +394,7 @@ function activate(context) {
     const hit = resourceAtLine(lines, editor.selection.active.line);
     if (!hit) {
       currentAddress = null;
+      addressItemVisible = false;
       addressItem.hide();
       return;
     }
@@ -401,6 +404,7 @@ function activate(context) {
     // left-truncate: the leaf module/resource end must stay visible
     addressItem.text = label.length > MAX ? `…${label.slice(label.length - MAX + 1)}` : label;
     addressItem.tooltip = `${hit.address}\n\n${hit.action} — click to copy address`;
+    addressItemVisible = true;
     addressItem.show();
   }
 
@@ -488,6 +492,14 @@ function activate(context) {
   updateVisibleEditors();
   updateAddressItem(vscode.window.activeTextEditor);
   for (const doc of vscode.workspace.textDocuments) promoteIfPlan(doc);
+
+  // integration-test hooks for state the VSCode API can't read back
+  return {
+    _test: {
+      addressItemText: () => addressItem.text,
+      addressItemVisible: () => addressItemVisible,
+    },
+  };
 }
 
 function deactivate() {}

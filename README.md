@@ -14,6 +14,17 @@ terraform show -no-color tfplan > $(date +%Y.%-m.%-d.%H%M).tfplan
 # the text plan is colorized too — commit it for record if desired
 ```
 
+- [Colors](#colors)
+- [Navigation](#navigation)
+  - [Resource address in the status bar](#resource-address-in-the-status-bar)
+  - [Editor defaults](#editor-defaults)
+- [File detection](#file-detection)
+- [Binary plans](#binary-plans)
+- [Publish](#publish)
+- [Development](#development)
+  - [Tests](#tests)
+  - [Manual test checklist](#manual-test-checklist)
+
 ## Colors
 
 | Marker | Action | Color |
@@ -134,7 +145,7 @@ make publish BUMP=minor   # bump minor instead
 To only build the .vsix without publishing: `make package`.
 To retry a single store for the current version: `make publish-ovsx` / `make publish-vsce`.
 
-## Local testing
+## Development
 
 First remove any installed copy — with equal versions it's undefined which
 copy the editor loads:
@@ -159,3 +170,24 @@ When in doubt whether a fix is actually installed, check the extension folder
 
 For quick iteration without installing: open this folder in VSCode and press
 F5 (Extension Development Host).
+
+### Tests
+
+- `make test` — unit tests (node, sub-second; also gates `make package`)
+- `make test-all` — unit tests + integration tests in a real downloaded
+  VSCode (cached in `.vscode-test/` after the first run)
+
+### Manual test checklist
+
+Some rendering behavior has no readable VSCode API and must be eyeballed
+after significant changes (use a real plan file):
+
+- **Outline click** — target line flashes briefly; editor takes focus with
+  the cursor on the resource header.
+- **Sticky scroll** — pins the current resource's `#` header plus the
+  `resource ... {` line; no stale top line while scrolling.
+- **Breadcrumbs** — one short crumb per module level; leaf resource visible.
+- **Status bar** — hover shows the full untruncated address; click copies it.
+- **Binary plans** — opening a binary `tfplan` renders the colorized preview;
+  regenerating the plan auto-refreshes it; "Save Rendered Plan As…" offers a
+  `<timestamp>.tfplan` default next to the binary.

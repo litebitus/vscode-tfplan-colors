@@ -2,6 +2,10 @@
 Makefile
 changelog.sh
 test/
+node_modules/
+.vscode-test/
+.vscode-test.mjs
+package-lock.json
 icon.svg
 *.vsix
 **/.DS_Store

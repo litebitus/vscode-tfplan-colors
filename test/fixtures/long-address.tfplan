@@ -1,0 +1,8 @@
+Terraform will perform the following actions:
+
+  # module.pipelines.module.ecs_service_production[0].module.deep.module.nesting.aws_appautoscaling_target.this will be updated in-place
+  ~ resource "aws_appautoscaling_target" "this" {
+      ~ max_capacity = 1 -> 3
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.

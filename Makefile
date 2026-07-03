@@ -13,10 +13,15 @@ VERSION = $(shell node -p "require('./package.json').version")
 PUBLISHER = $(shell node -p "require('./package.json').publisher")
 EXT_ID = $(PUBLISHER).$(shell node -p "require('./package.json').name")
 
-.PHONY: test package publish preflight bump push publish-ovsx publish-vsce uninstall
+.PHONY: test test-all package publish preflight bump push publish-ovsx publish-vsce uninstall
 
 test:
 	node --test test/*.test.js
+
+# unit tests plus integration tests: downloads a real VSCode on first run
+# (cached in .vscode-test/), launches it with the extension, runs test/integration/
+test-all: test
+	npx vscode-test
 
 package: test
 	vsce package -o $(VSIX)
