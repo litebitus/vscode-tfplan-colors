@@ -1,3 +1,7 @@
+## 1.2.0 (2026-07-04)
+
+- feat: plan summary sidebar view grouped by action severity, with integration tests
+
 ## 1.1.0 (2026-07-03)
 
 - fix: rename rendered previews to dodge custom editor claims; gate package on test-all

@@ -2,7 +2,7 @@
   "name": "tfplan-colors",
   "displayName": "Terraform Plan Colors",
   "description": "Colorize saved terraform plan output, text or binary (rendered via terraform show): actions, gutter bars, and outline navigation",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "lite2073",
   "license": "MIT",
   "repository": {
