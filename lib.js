@@ -245,6 +245,23 @@ function planPathFrom(renderedPath) {
   return renderedPath;
 }
 
+// Group resources by action for the Plan Summary view, ordered by review
+// severity (what can bite you first).
+const ACTION_ORDER = ['replace', 'destroy', 'create', 'update', 'read', 'forget'];
+
+function planSummary(lines) {
+  const { headers } = parsePlanStructure(lines);
+  const byAction = new Map();
+  for (const h of headers) {
+    if (!byAction.has(h.action)) byAction.set(h.action, []);
+    byAction.get(h.action).push({ address: h.address, line: h.line });
+  }
+  return ACTION_ORDER.filter((a) => byAction.has(a)).map((action) => ({
+    action,
+    resources: byAction.get(action),
+  }));
+}
+
 // Resolve which resource block a line belongs to (header line included).
 function resourceAtLine(lines, lineNo) {
   const { headers, outputsLine, planLine } = parsePlanStructure(lines);
@@ -326,4 +343,5 @@ module.exports = {
   resourceAtLine,
   renderedPathFor,
   planPathFrom,
+  planSummary,
 };

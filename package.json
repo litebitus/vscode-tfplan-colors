@@ -25,6 +25,7 @@
     "version": "sh ./changelog.sh && git add CHANGELOG.md"
   },
   "activationEvents": [
+    "onLanguage:terraform-plan",
     "onLanguage:plaintext"
   ],
   "contributes": {
@@ -47,20 +48,44 @@
         "command": "tfplanColors.copyResourceAddress",
         "title": "Copy Resource Address at Cursor",
         "category": "Terraform Plan"
+      },
+      {
+        "command": "tfplanColors.showSummary",
+        "title": "Summarize Plan",
+        "category": "Terraform Plan",
+        "icon": "$(list-tree)"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "tfplanSummary",
+          "name": "Plan Summary",
+          "when": "tfplanColors.planActive"
+        }
+      ]
+    },
     "menus": {
       "editor/title": [
         {
+          "command": "tfplanColors.showSummary",
+          "when": "editorLangId == terraform-plan",
+          "group": "navigation@1"
+        },
+        {
           "command": "tfplanColors.saveRenderedPlan",
           "when": "resourceScheme == tfplan-show",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [
         {
           "command": "tfplanColors.saveRenderedPlan",
           "when": "resourceScheme == tfplan-show"
+        },
+        {
+          "command": "tfplanColors.showSummary",
+          "when": "editorLangId == terraform-plan"
         }
       ]
     },

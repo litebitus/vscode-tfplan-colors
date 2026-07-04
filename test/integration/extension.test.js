@@ -151,6 +151,51 @@ suite('status bar address item', () => {
   });
 });
 
+suite('plan summary view', () => {
+  async function testApi() {
+    const ext = vscode.extensions.getExtension('lite2073.tfplan-colors');
+    await ext.activate();
+    return ext.exports._test;
+  }
+
+  test('groups resources by action in severity order', async () => {
+    const api = await testApi();
+    await openDoc('sample.tfplan');
+    const groups = await waitFor(async () => {
+      const g = await api.summaryChildren();
+      return g.length === 6 ? g : null;
+    });
+    assert.deepStrictEqual(
+      groups.map((g) => g.action),
+      ['replace', 'destroy', 'create', 'update', 'read', 'forget']
+    );
+    const item = api.summaryItem(groups[0]);
+    assert.strictEqual(item.label, 'replace (1)');
+    assert.strictEqual(item.iconPath.id, 'arrow-swap');
+  });
+
+  test('resource items reveal their block in the plan', async () => {
+    const api = await testApi();
+    await openDoc('sample.tfplan');
+    const groups = await waitFor(async () => {
+      const g = await api.summaryChildren();
+      return g.length === 6 ? g : null;
+    });
+    const [resource] = api.summaryChildren(groups[0]);
+    const item = api.summaryItem(resource);
+    assert.strictEqual(item.label, 'aws_security_group.sg');
+    assert.strictEqual(item.command.command, 'vscode.open');
+    assert.strictEqual(item.command.arguments[1].selection.start.line, 25);
+  });
+
+  test('Summarize command makes the view visible', async () => {
+    const api = await testApi();
+    await openDoc('sample.tfplan');
+    await vscode.commands.executeCommand('tfplanColors.showSummary');
+    await waitFor(() => api.summaryViewVisible());
+  });
+});
+
 suite('resource address command', () => {
   test('copies the enclosing resource address at the cursor', async () => {
     const doc = await openDoc('sample.tfplan');

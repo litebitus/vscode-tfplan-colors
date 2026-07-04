@@ -14,6 +14,7 @@ const {
   buildRenderError,
   renderedPathFor,
   planPathFrom,
+  planSummary,
 } = require('./lib');
 
 // Action colors — chosen to be readable on both dark and light themes.
@@ -122,6 +123,75 @@ function updateDecorations(editor) {
 function updateVisibleEditors() {
   for (const editor of vscode.window.visibleTextEditors) {
     updateDecorations(editor);
+  }
+}
+
+// Sidebar "Plan Summary" view: resources grouped by action with colored
+// icons (the Outline can't color items), clicking reveals the block in the
+// plan. Follows the active plan editor.
+const ACTION_ICONS = {
+  create:  ['add', 'charts.green'],
+  update:  ['edit', 'charts.yellow'],
+  destroy: ['remove', 'charts.red'],
+  replace: ['arrow-swap', 'charts.purple'],
+  read:    ['eye', 'charts.lines'],
+  forget:  ['circle-slash', 'charts.lines'],
+};
+
+class PlanSummaryProvider {
+  constructor() {
+    this._onDidChangeTreeData = new vscode.EventEmitter();
+    this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+    this._groups = [];
+    this._uri = null;
+  }
+
+  refresh(editor) {
+    if (editor) {
+      // drives the view's visibility (`when` clause); left unchanged when
+      // focus moves to panels/trees (editor undefined) so the view doesn't
+      // vanish while being used
+      vscode.commands.executeCommand('setContext', 'tfplanColors.planActive', isPlanDoc(editor.document));
+    }
+    if (!editor || !isPlanDoc(editor.document)) {
+      // keep the last summary while focus is on the tree or other views;
+      // it only resets when another plan doc becomes active
+      return;
+    }
+    const lines = [];
+    for (let i = 0; i < editor.document.lineCount; i++) lines.push(editor.document.lineAt(i).text);
+    this._groups = planSummary(lines);
+    this._uri = editor.document.uri;
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
+  getChildren(el) {
+    if (!el) return this._groups.map((g) => ({ type: 'group', ...g }));
+    if (el.type === 'group') {
+      return el.resources.map((r) => ({ type: 'resource', action: el.action, ...r }));
+    }
+    return [];
+  }
+
+  getTreeItem(el) {
+    const [icon, color] = ACTION_ICONS[el.action];
+    if (el.type === 'group') {
+      const item = new vscode.TreeItem(
+        `${el.action} (${el.resources.length})`,
+        vscode.TreeItemCollapsibleState.Expanded
+      );
+      item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
+      return item;
+    }
+    const item = new vscode.TreeItem(el.address, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
+    item.tooltip = el.address;
+    item.command = {
+      command: 'vscode.open',
+      title: 'Reveal in plan',
+      arguments: [this._uri, { selection: new vscode.Range(el.line, 0, el.line, 0) }],
+    };
+    return item;
   }
 }
 
@@ -366,6 +436,9 @@ function activate(context) {
   log('extension activated');
   createDecorationTypes(context);
   const showProvider = new PlanShowProvider();
+  const summaryProvider = new PlanSummaryProvider();
+  // createTreeView (vs registerTreeDataProvider) exposes .visible for tests
+  const summaryTree = vscode.window.createTreeView('tfplanSummary', { treeDataProvider: summaryProvider });
   const flashType = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
     isWholeLine: true,
@@ -412,6 +485,10 @@ function activate(context) {
       new PlanSymbolProvider()
     ),
     showProvider,
+    summaryTree,
+    vscode.commands.registerCommand('tfplanColors.showSummary', () =>
+      vscode.commands.executeCommand('tfplanSummary.focus')
+    ),
     vscode.languages.registerFoldingRangeProvider({ language: 'terraform-plan' }, new PlanFoldingProvider()),
     vscode.workspace.registerTextDocumentContentProvider(SHOW_SCHEME, showProvider),
     vscode.workspace.onDidOpenTextDocument(promoteIfPlan),
@@ -469,6 +546,7 @@ function activate(context) {
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) updateDecorations(editor);
       updateAddressItem(editor);
+      summaryProvider.refresh(editor);
     }),
     vscode.window.onDidChangeVisibleTextEditors(updateVisibleEditors),
     vscode.workspace.onDidOpenTextDocument(updateVisibleEditors)
@@ -483,12 +561,15 @@ function activate(context) {
         for (const editor of vscode.window.visibleTextEditors) {
           if (editor.document === e.document) updateDecorations(editor);
         }
+        const active = vscode.window.activeTextEditor;
+        if (active && active.document === e.document) summaryProvider.refresh(active);
       }, 200);
     })
   );
 
   updateVisibleEditors();
   updateAddressItem(vscode.window.activeTextEditor);
+  summaryProvider.refresh(vscode.window.activeTextEditor);
   for (const doc of vscode.workspace.textDocuments) promoteIfPlan(doc);
 
   // integration-test hooks for state the VSCode API can't read back
@@ -496,6 +577,9 @@ function activate(context) {
     _test: {
       addressItemText: () => addressItem.text,
       addressItemVisible: () => addressItemVisible,
+      summaryChildren: (el) => summaryProvider.getChildren(el),
+      summaryItem: (el) => summaryProvider.getTreeItem(el),
+      summaryViewVisible: () => summaryTree.visible,
     },
   };
 }

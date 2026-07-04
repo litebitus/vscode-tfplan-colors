@@ -16,6 +16,7 @@ terraform show -no-color tfplan > $(date +%Y.%-m.%-d.%H%M).tfplan
 
 - [Colors](#colors)
 - [Navigation](#navigation)
+  - [Plan Summary view](#plan-summary-view)
   - [Resource address in the status bar](#resource-address-in-the-status-bar)
   - [Editor defaults](#editor-defaults)
 - [File detection](#file-detection)
@@ -33,7 +34,7 @@ terraform show -no-color tfplan > $(date +%Y.%-m.%-d.%H%M).tfplan
 | `~` | update in-place | yellow |
 | `-` | destroy | red |
 | `-/+` / `+/-` | destroy and create replacement | magenta |
-| `<=` | read (data resources) | grey |
+| `<=` | read (data sources) | grey |
 | `.` | no longer managed (forget) | grey italic |
 
 Extras:
@@ -58,6 +59,15 @@ Each resource block becomes a document symbol, nested under its module chain
 - `Changes to Outputs` and the final `Plan: N to add...` line are symbols too.
 
 Resource blocks fold from their header line; inner attribute blocks fold too.
+
+### Plan Summary view
+
+A **Plan Summary** view appears in the Explorer sidebar (next to Outline)
+whenever a plan document is active: resources grouped by action in severity
+order — replace, destroy, create, update, read, forget — so destructive
+changes surface first, with counts and color-coded icons per group.
+Empty action groups are omitted. Clicking a resource reveals its block in the plan. Reach
+it via the list icon in the editor title or `Terraform Plan: Summarize Plan`.
 
 ### Resource address in the status bar
 

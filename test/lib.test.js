@@ -15,6 +15,7 @@ const {
   resourceAtLine,
   renderedPathFor,
   planPathFrom,
+  planSummary,
 } = require('../lib');
 
 // Sanitized composite of real terraform plan output, covering every marker
@@ -416,6 +417,40 @@ describe('foldingRanges', () => {
 
   test('empty input yields no ranges', () => {
     assert.deepEqual(foldingRanges([]), []);
+  });
+});
+
+describe('planSummary', () => {
+  test('groups resources by action in severity order', () => {
+    const groups = planSummary(PLAN);
+    assert.deepEqual(
+      groups.map((g) => [g.action, g.resources.length]),
+      [
+        ['replace', 1],
+        ['destroy', 1],
+        ['create', 1],
+        ['update', 1],
+        ['read', 1],
+        ['forget', 1],
+      ]
+    );
+  });
+
+  test('resources carry full address and header line', () => {
+    const groups = planSummary(PLAN);
+    const replace = groups.find((g) => g.action === 'replace');
+    assert.deepEqual(replace.resources, [{ address: 'aws_security_group.sg', line: 25 }]);
+    const read = groups.find((g) => g.action === 'read');
+    assert.deepEqual(read.resources, [{ address: 'module.app.data.aws_ami.base', line: 9 }]);
+  });
+
+  test('empty actions are omitted', () => {
+    const groups = planSummary(PLAN.slice(0, 14)); // only the read block
+    assert.deepEqual(groups.map((g) => g.action), ['read']);
+  });
+
+  test('no changes yields no groups', () => {
+    assert.deepEqual(planSummary(['No changes.']), []);
   });
 });
 
