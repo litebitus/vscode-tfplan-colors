@@ -1,3 +1,7 @@
+## 1.3.0 (2026-07-05)
+
+- feat: nest summary resources under module chains; refresh tagline and intro
+
 ## 1.2.0 (2026-07-04)
 
 - feat: plan summary sidebar view grouped by action severity, with integration tests
