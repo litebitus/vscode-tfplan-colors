@@ -246,19 +246,38 @@ function planPathFrom(renderedPath) {
 }
 
 // Group resources by action for the Plan Summary view, ordered by review
-// severity (what can bite you first).
+// severity (what can bite you first). Within each group, resources nest
+// under their module chain — the sidebar is narrow, real addresses are
+// long, and short per-level rows beat one truncated line.
 const ACTION_ORDER = ['replace', 'destroy', 'create', 'update', 'read', 'forget'];
 
 function planSummary(lines) {
   const { headers } = parsePlanStructure(lines);
   const byAction = new Map();
   for (const h of headers) {
-    if (!byAction.has(h.action)) byAction.set(h.action, []);
-    byAction.get(h.action).push({ address: h.address, line: h.line });
+    if (!byAction.has(h.action)) byAction.set(h.action, { count: 0, children: [] });
+    const group = byAction.get(h.action);
+    group.count++;
+    const segments = splitAddress(h.address);
+    let list = group.children;
+    for (const seg of segments.slice(0, -1)) {
+      let node = list.find((n) => n.type === 'module' && n.name === seg);
+      if (!node) {
+        node = { type: 'module', name: seg, children: [] };
+        list.push(node);
+      }
+      list = node.children;
+    }
+    list.push({
+      type: 'resource',
+      address: h.address,
+      leaf: segments[segments.length - 1],
+      line: h.line,
+    });
   }
   return ACTION_ORDER.filter((a) => byAction.has(a)).map((action) => ({
     action,
-    resources: byAction.get(action),
+    ...byAction.get(action),
   }));
 }
 

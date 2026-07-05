@@ -1,7 +1,8 @@
 # Terraform Plan Colors
 
-Colorizes saved `terraform plan` output — text files (e.g. `2026.5.7.2230.tfplan`,
-`prod.tfplan.txt`) and binary plans, rendered on open via `terraform show`.
+Colorizes saved `terraform plan` output — both binary and text plans — with
+action colors and gutter bars, a severity-ordered Plan Summary sidebar, and
+module-nested outline navigation.
 
 ```sh
 terraform plan -out=tfplan
@@ -66,7 +67,8 @@ A **Plan Summary** view appears in the Explorer sidebar (next to Outline)
 whenever a plan document is active: resources grouped by action in severity
 order — replace, destroy, create, update, read, forget — so destructive
 changes surface first, with counts and color-coded icons per group.
-Empty action groups are omitted. Clicking a resource reveals its block in the plan. Reach
+Within each group resources nest under their module chain, keeping every
+row short enough for the sidebar. Empty action groups are omitted. Clicking a resource reveals its block in the plan. Reach
 it via the list icon in the editor title or `Terraform Plan: Summarize Plan`.
 
 ### Resource address in the status bar
@@ -96,9 +98,10 @@ overridden in your settings under `"[terraform-plan]"`:
 
 ## File detection
 
-Files with `tfplan` anywhere in the name get the `Terraform Plan` language. `.tfplan` is recommended: `.txt` files keep
-the icon theme's text-file icon, while `.tfplan` files show this extension's
-own file icon.
+Files with `tfplan` anywhere in the name (e.g. `2026.5.7.2230.tfplan`,
+`prod.tfplan.txt`, `tfplan`) get the `Terraform Plan` language. `.tfplan` is
+recommended: `.txt` files keep the icon theme's text-file icon, while
+`.tfplan` files show this extension's own file icon.
 Plain-text files with any other name are content-sniffed: when the first
 lines look like plan output (`Terraform used the selected providers...`),
 the document is automatically switched to the `Terraform Plan` language, so

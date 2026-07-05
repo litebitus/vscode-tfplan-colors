@@ -188,6 +188,23 @@ suite('plan summary view', () => {
     assert.strictEqual(item.command.arguments[1].selection.start.line, 25);
   });
 
+  test('module resources nest under module nodes with leaf labels', async () => {
+    const api = await testApi();
+    await openDoc('sample.tfplan');
+    const groups = await waitFor(async () => {
+      const g = await api.summaryChildren();
+      return g.length === 6 ? g : null;
+    });
+    const read = groups.find((g) => g.action === 'read');
+    const [moduleNode] = api.summaryChildren(read);
+    assert.strictEqual(api.summaryItem(moduleNode).label, 'module.app');
+    const [resource] = api.summaryChildren(moduleNode);
+    const item = api.summaryItem(resource);
+    assert.strictEqual(item.label, 'data.aws_ami.base');
+    assert.strictEqual(item.tooltip, 'module.app.data.aws_ami.base');
+    assert.strictEqual(item.command.arguments[1].selection.start.line, 9);
+  });
+
   test('Summarize command makes the view visible', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');

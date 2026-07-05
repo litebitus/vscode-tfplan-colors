@@ -167,23 +167,26 @@ class PlanSummaryProvider {
 
   getChildren(el) {
     if (!el) return this._groups.map((g) => ({ type: 'group', ...g }));
-    if (el.type === 'group') {
-      return el.resources.map((r) => ({ type: 'resource', action: el.action, ...r }));
-    }
-    return [];
+    // action flows down the tree so every level can carry the group's color
+    return (el.children || []).map((c) => ({ ...c, action: el.action }));
   }
 
   getTreeItem(el) {
     const [icon, color] = ACTION_ICONS[el.action];
     if (el.type === 'group') {
       const item = new vscode.TreeItem(
-        `${el.action} (${el.resources.length})`,
+        `${el.action} (${el.count})`,
         vscode.TreeItemCollapsibleState.Expanded
       );
       item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
       return item;
     }
-    const item = new vscode.TreeItem(el.address, vscode.TreeItemCollapsibleState.None);
+    if (el.type === 'module') {
+      const item = new vscode.TreeItem(el.name, vscode.TreeItemCollapsibleState.Expanded);
+      item.iconPath = new vscode.ThemeIcon('symbol-namespace');
+      return item;
+    }
+    const item = new vscode.TreeItem(el.leaf, vscode.TreeItemCollapsibleState.None);
     item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
     item.tooltip = el.address;
     item.command = {

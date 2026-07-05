@@ -421,10 +421,10 @@ describe('foldingRanges', () => {
 });
 
 describe('planSummary', () => {
-  test('groups resources by action in severity order', () => {
+  test('groups resources by action in severity order with counts', () => {
     const groups = planSummary(PLAN);
     assert.deepEqual(
-      groups.map((g) => [g.action, g.resources.length]),
+      groups.map((g) => [g.action, g.count]),
       [
         ['replace', 1],
         ['destroy', 1],
@@ -436,12 +436,45 @@ describe('planSummary', () => {
     );
   });
 
-  test('resources carry full address and header line', () => {
+  test('root-level resources are direct children with leaf and line', () => {
     const groups = planSummary(PLAN);
     const replace = groups.find((g) => g.action === 'replace');
-    assert.deepEqual(replace.resources, [{ address: 'aws_security_group.sg', line: 25 }]);
+    assert.deepEqual(replace.children, [
+      { type: 'resource', address: 'aws_security_group.sg', leaf: 'aws_security_group.sg', line: 25 },
+    ]);
+  });
+
+  test('module resources nest under module nodes', () => {
+    const groups = planSummary(PLAN);
     const read = groups.find((g) => g.action === 'read');
-    assert.deepEqual(read.resources, [{ address: 'module.app.data.aws_ami.base', line: 9 }]);
+    assert.deepEqual(read.children, [
+      {
+        type: 'module',
+        name: 'module.app',
+        children: [
+          { type: 'resource', address: 'module.app.data.aws_ami.base', leaf: 'data.aws_ami.base', line: 9 },
+        ],
+      },
+    ]);
+  });
+
+  test('deep chains nest one node per module and share prefixes', () => {
+    const lines = [
+      '  # module.a.module.b.aws_x.one will be destroyed',
+      '  - resource "aws_x" "one" {',
+      '    }',
+      '  # module.a.module.b.aws_x.two will be destroyed',
+      '  - resource "aws_x" "two" {',
+      '    }',
+    ];
+    const groups = planSummary(lines);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].count, 2);
+    const a = groups[0].children[0];
+    assert.equal(a.name, 'module.a');
+    const b = a.children[0];
+    assert.equal(b.name, 'module.b');
+    assert.deepEqual(b.children.map((r) => r.leaf), ['aws_x.one', 'aws_x.two']);
   });
 
   test('empty actions are omitted', () => {
