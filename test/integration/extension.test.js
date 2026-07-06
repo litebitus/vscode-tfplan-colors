@@ -209,6 +209,33 @@ suite('plan summary view', () => {
     assert.strictEqual(item.command.arguments[1].selection.start.line, 9);
   });
 
+  test('repeated module/leaf names get unique ids and non-empty nodes', async () => {
+    const api = await testApi();
+    await openDoc('repeated-modules.tfplan');
+    const roots = await waitFor(async () => {
+      const g = await api.summaryChildren();
+      return g.length === 2 && g[1].action === 'update' && g[1].count === 2 ? g : null;
+    });
+    const ids = new Set();
+    let modules = 0;
+    const walk = (elements) => {
+      for (const el of elements) {
+        const item = api.summaryItem(el);
+        assert.ok(item.id, `missing id on ${item.label}`);
+        assert.ok(!ids.has(item.id), `duplicate id: ${item.id}`);
+        ids.add(item.id);
+        const children = api.summaryChildren(el);
+        if (el.type === 'module') {
+          modules++;
+          assert.ok(children.length > 0, `module ${el.name} rendered empty`);
+        }
+        walk(children);
+      }
+    };
+    walk(roots);
+    assert.strictEqual(modules, 4); // alpha, beta, and one inner[0] under each
+  });
+
   test('Summarize command makes the view visible', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');

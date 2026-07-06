@@ -1,0 +1,13 @@
+Terraform will perform the following actions:
+
+  # module.alpha.module.inner[0].aws_lambda_function.fn will be updated in-place
+  ~ resource "aws_lambda_function" "fn" {
+      ~ timeout = 30 -> 60
+    }
+
+  # module.beta.module.inner[0].aws_lambda_function.fn will be updated in-place
+  ~ resource "aws_lambda_function" "fn" {
+      ~ timeout = 30 -> 60
+    }
+
+Plan: 0 to add, 2 to change, 0 to destroy.
