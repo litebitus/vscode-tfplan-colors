@@ -1,3 +1,7 @@
+## 1.4.0 (2026-07-06)
+
+- feat: show terraform's Plan summary line atop the summary view
+
 ## 1.3.2 (2026-07-06)
 
 - test: integration coverage for flash guard and find-widget selections
