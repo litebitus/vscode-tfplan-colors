@@ -1,3 +1,7 @@
+## 1.4.1 (2026-07-06)
+
+- fix: stable tree item ids and refresh suppression for plan summary; test duplicate-name nesting
+
 ## 1.4.0 (2026-07-06)
 
 - feat: show terraform's Plan summary line atop the summary view
