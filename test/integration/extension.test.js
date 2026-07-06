@@ -236,6 +236,38 @@ suite('plan summary view', () => {
     assert.strictEqual(modules, 4); // alpha, beta, and one inner[0] under each
   });
 
+  test('summary re-parses when the document changes', async () => {
+    const api = await testApi();
+    const doc = await vscode.workspace.openTextDocument({
+      language: 'terraform-plan',
+      content: [
+        '  # aws_instance.one will be created',
+        '  + resource "aws_instance" "one" {',
+        '    }',
+        '',
+      ].join('\n'),
+    });
+    const editor = await vscode.window.showTextDocument(doc);
+    await waitFor(async () => {
+      const roots = api.summaryChildren();
+      const create = roots.find((g) => g.action === 'create');
+      return create && create.count === 1;
+    });
+    await editor.edit((b) =>
+      b.insert(new vscode.Position(doc.lineCount, 0), [
+        '  # aws_instance.two will be destroyed',
+        '  - resource "aws_instance" "two" {',
+        '    }',
+        '',
+      ].join('\n'))
+    );
+    await waitFor(async () => {
+      const roots = api.summaryChildren();
+      const destroy = roots.find((g) => g.action === 'destroy');
+      return destroy && destroy.count === 1;
+    });
+  });
+
   test('Summarize command makes the view visible', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');

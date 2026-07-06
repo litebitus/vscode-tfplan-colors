@@ -601,18 +601,22 @@ function activate(context) {
     vscode.workspace.onDidOpenTextDocument(updateVisibleEditors)
   );
 
-  // Re-decorate on edit, debounced.
-  let timer;
+  // Re-decorate on edit, debounced PER DOCUMENT — a shared timer lets
+  // chatty documents (output channels, logs) supersede a plan doc's pending
+  // update, dropping decoration/summary refreshes entirely
+  const changeTimers = new Map();
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
+      const key = e.document.uri.toString();
+      clearTimeout(changeTimers.get(key));
+      changeTimers.set(key, setTimeout(() => {
+        changeTimers.delete(key);
         for (const editor of vscode.window.visibleTextEditors) {
           if (editor.document === e.document) updateDecorations(editor);
         }
         const active = vscode.window.activeTextEditor;
         if (active && active.document === e.document) summaryProvider.refresh(active);
-      }, 200);
+      }, 200));
     })
   );
 
