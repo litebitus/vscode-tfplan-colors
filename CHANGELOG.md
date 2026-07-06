@@ -1,3 +1,7 @@
+## 1.3.1 (2026-07-05)
+
+- fix: hide plan summary view when all plan editors close
+
 ## 1.3.0 (2026-07-05)
 
 - feat: nest summary resources under module chains; refresh tagline and intro
