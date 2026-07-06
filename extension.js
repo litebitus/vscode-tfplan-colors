@@ -450,6 +450,7 @@ function activate(context) {
     isWholeLine: true,
   });
   let flashTimer;
+  let flashCount = 0; // observability for tests — decorations/focus aren't readable back
 
   // status bar: full resource address at the cursor — sticky scroll and
   // breadcrumbs truncate deeply nested addresses; this keeps the leaf end
@@ -538,6 +539,7 @@ function activate(context) {
       const sel = e.selections[0];
       if (e.selections.length !== 1 || !sel.isEmpty || sel.active.character !== 0) return;
       const line = sel.active.line;
+      flashCount++;
       const range = new vscode.Range(line, 0, line, e.textEditor.document.lineAt(line).text.length);
       e.textEditor.setDecorations(flashType, [range]);
       // single-click outline navigation leaves focus in the outline tree;
@@ -591,6 +593,7 @@ function activate(context) {
       summaryChildren: (el) => summaryProvider.getChildren(el),
       summaryItem: (el) => summaryProvider.getTreeItem(el),
       summaryViewVisible: () => summaryTree.visible,
+      flashCount: () => flashCount,
     },
   };
 }

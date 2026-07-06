@@ -222,6 +222,36 @@ suite('plan summary view', () => {
   });
 });
 
+suite('navigation flash', () => {
+  async function testApi() {
+    const ext = vscode.extensions.getExtension('lite2073.tfplan-colors');
+    await ext.activate();
+    return ext.exports._test;
+  }
+
+  test('collapsed column-0 jump triggers the flash', async () => {
+    const api = await testApi();
+    const doc = await openDoc('sample.tfplan');
+    const editor = await vscode.window.showTextDocument(doc);
+    const before = api.flashCount();
+    editor.selection = new vscode.Selection(20, 0, 20, 0);
+    await waitFor(() => api.flashCount() > before);
+  });
+
+  test('find-widget match movement does not flash or steal focus', async () => {
+    const api = await testApi();
+    const doc = await openDoc('sample.tfplan');
+    await vscode.window.showTextDocument(doc);
+    const before = api.flashCount();
+    await vscode.commands.executeCommand('editor.actions.findWithArgs', { searchString: 'resource' });
+    await vscode.commands.executeCommand('editor.action.nextMatchFindAction');
+    await vscode.commands.executeCommand('editor.action.nextMatchFindAction');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.strictEqual(api.flashCount(), before);
+    await vscode.commands.executeCommand('closeFindWidget');
+  });
+});
+
 suite('resource address command', () => {
   test('copies the enclosing resource address at the cursor', async () => {
     const doc = await openDoc('sample.tfplan');
