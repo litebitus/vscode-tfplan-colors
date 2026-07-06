@@ -1,3 +1,8 @@
+## 1.3.2 (2026-07-06)
+
+- test: integration coverage for flash guard and find-widget selections
+- fix: don't flash or steal focus on find-widget selection changes
+
 ## 1.3.1 (2026-07-05)
 
 - fix: hide plan summary view when all plan editors close
