@@ -1,3 +1,8 @@
+## 1.4.2 (2026-07-06)
+
+- fix: per-document debounce so chatty documents can't drop summary refreshes
+- test: run integration suite against the 1.85 engines floor and stable
+
 ## 1.4.1 (2026-07-06)
 
 - fix: stable tree item ids and refresh suppression for plan summary; test duplicate-name nesting
