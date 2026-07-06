@@ -532,7 +532,12 @@ function activate(context) {
         e.kind === vscode.TextEditorSelectionChangeKind.Keyboard
       ) return;
       if (!isPlanDoc(e.textEditor.document)) return;
-      const line = e.selections[0].active.line;
+      // navigation targets are a collapsed cursor at column 0; the find
+      // widget selects matched text (non-empty, mid-line) — flashing or
+      // stealing focus there would break the search flow
+      const sel = e.selections[0];
+      if (e.selections.length !== 1 || !sel.isEmpty || sel.active.character !== 0) return;
+      const line = sel.active.line;
       const range = new vscode.Range(line, 0, line, e.textEditor.document.lineAt(line).text.length);
       e.textEditor.setDecorations(flashType, [range]);
       // single-click outline navigation leaves focus in the outline tree;

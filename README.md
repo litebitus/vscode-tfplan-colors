@@ -201,6 +201,8 @@ after significant changes (use a real plan file):
 
 - **Outline click** — target line flashes briefly; editor takes focus with
   the cursor on the resource header.
+- **In-editor search (Cmd+F)** — typing in the find box keeps focus there;
+  match-to-match movement must not flash or yank focus into the document.
 - **Sticky scroll** — pins the current resource's `#` header plus the
   `resource ... {` line; no stale top line while scrolling.
 - **Breadcrumbs** — one short crumb per module level; leaf resource visible.
