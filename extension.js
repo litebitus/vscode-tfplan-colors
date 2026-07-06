@@ -145,6 +145,7 @@ class PlanSummaryProvider {
     this._summary = null;
     this._groups = [];
     this._uri = null;
+    this._doc = null;
     this._docVersion = -1;
   }
 
@@ -164,11 +165,14 @@ class PlanSummaryProvider {
       return;
     }
     // skip churn: rebuilding identical content on every editor focus change
-    // resets the tree's expansion tracking for nothing
-    if (this._uri && this._uri.toString() === editor.document.uri.toString() &&
-        this._docVersion === editor.document.version) {
+    // resets the tree's expansion tracking for nothing. Keyed on the document
+    // INSTANCE, not (uri, version): version restarts at 1 for a reopened
+    // document, so a file changed on disk between close and reopen would
+    // wrongly count as unchanged.
+    if (this._doc === editor.document && this._docVersion === editor.document.version) {
       return;
     }
+    this._doc = editor.document;
     this._docVersion = editor.document.version;
     const lines = [];
     for (let i = 0; i < editor.document.lineCount; i++) lines.push(editor.document.lineAt(i).text);

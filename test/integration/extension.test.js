@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
 
@@ -266,6 +267,29 @@ suite('plan summary view', () => {
       const destroy = roots.find((g) => g.action === 'destroy');
       return destroy && destroy.count === 1;
     });
+  });
+
+  test('summary re-parses a file changed on disk between close and reopen', async () => {
+    const api = await testApi();
+    const tmp = path.join(fixtures, 'tmp-reopen.tfplan');
+    const plan = (action, marker) => [
+      `  # aws_instance.x will be ${action}`,
+      `  ${marker} resource "aws_instance" "x" {`,
+      '    }',
+      '',
+    ].join('\n');
+    try {
+      fs.writeFileSync(tmp, plan('created', '+'));
+      await openDoc('tmp-reopen.tfplan');
+      await waitFor(() => api.summaryChildren().some((g) => g.action === 'create'));
+
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      fs.writeFileSync(tmp, plan('destroyed', '-'));
+      await openDoc('tmp-reopen.tfplan');
+      await waitFor(() => api.summaryChildren().some((g) => g.action === 'destroy'));
+    } finally {
+      fs.unlinkSync(tmp);
+    }
   });
 
   test('Summarize command makes the view visible', async () => {
