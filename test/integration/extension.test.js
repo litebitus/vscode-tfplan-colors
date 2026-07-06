@@ -211,6 +211,15 @@ suite('plan summary view', () => {
     await vscode.commands.executeCommand('tfplanColors.showSummary');
     await waitFor(() => api.summaryViewVisible());
   });
+
+  test('view hides when all plan editors are closed', async () => {
+    const api = await testApi();
+    await openDoc('sample.tfplan');
+    await vscode.commands.executeCommand('tfplanColors.showSummary');
+    await waitFor(() => api.summaryViewVisible());
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await waitFor(() => !api.summaryViewVisible());
+  });
 });
 
 suite('resource address command', () => {

@@ -147,11 +147,14 @@ class PlanSummaryProvider {
   }
 
   refresh(editor) {
+    // drives the view's visibility (`when` clause). With no active editor
+    // (focus in panels/trees, or tabs closing) the view only hides when no
+    // visible editor holds a plan — so it survives focus changes but goes
+    // away when the plan is actually closed.
     if (editor) {
-      // drives the view's visibility (`when` clause); left unchanged when
-      // focus moves to panels/trees (editor undefined) so the view doesn't
-      // vanish while being used
       vscode.commands.executeCommand('setContext', 'tfplanColors.planActive', isPlanDoc(editor.document));
+    } else if (!vscode.window.visibleTextEditors.some((e) => isPlanDoc(e.document))) {
+      vscode.commands.executeCommand('setContext', 'tfplanColors.planActive', false);
     }
     if (!editor || !isPlanDoc(editor.document)) {
       // keep the last summary while focus is on the tree or other views;
