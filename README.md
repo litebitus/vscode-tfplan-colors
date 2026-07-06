@@ -64,8 +64,8 @@ Resource blocks fold from their header line; inner attribute blocks fold too.
 ### Plan Summary view
 
 A **Plan Summary** view appears in the Explorer sidebar (next to Outline)
-whenever a plan document is active: resources grouped by action in severity
-order — replace, destroy, create, update, read, forget — so destructive
+whenever a plan document is active: terraform's `Plan: N to add...` line at
+the top, then resources grouped by action in severity order — replace, destroy, create, update, read, forget — so destructive
 changes surface first, with counts and color-coded icons per group.
 Within each group resources nest under their module chain, keeping every
 row short enough for the sidebar. Empty action groups are omitted. Clicking a resource reveals its block in the plan. Reach

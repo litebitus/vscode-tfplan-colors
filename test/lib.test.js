@@ -421,8 +421,18 @@ describe('foldingRanges', () => {
 });
 
 describe('planSummary', () => {
+  test('carries the Plan summary line', () => {
+    const { summary } = planSummary(PLAN);
+    assert.deepEqual(summary, { text: 'Plan: 1 to add, 2 to change, 2 to destroy.', line: 48 });
+  });
+
+  test('summary is null without a Plan line', () => {
+    const { summary } = planSummary(PLAN.slice(0, 42));
+    assert.equal(summary, null);
+  });
+
   test('groups resources by action in severity order with counts', () => {
-    const groups = planSummary(PLAN);
+    const { groups } = planSummary(PLAN);
     assert.deepEqual(
       groups.map((g) => [g.action, g.count]),
       [
@@ -437,7 +447,7 @@ describe('planSummary', () => {
   });
 
   test('root-level resources are direct children with leaf and line', () => {
-    const groups = planSummary(PLAN);
+    const { groups } = planSummary(PLAN);
     const replace = groups.find((g) => g.action === 'replace');
     assert.deepEqual(replace.children, [
       { type: 'resource', address: 'aws_security_group.sg', leaf: 'aws_security_group.sg', line: 25 },
@@ -445,7 +455,7 @@ describe('planSummary', () => {
   });
 
   test('module resources nest under module nodes', () => {
-    const groups = planSummary(PLAN);
+    const { groups } = planSummary(PLAN);
     const read = groups.find((g) => g.action === 'read');
     assert.deepEqual(read.children, [
       {
@@ -467,7 +477,7 @@ describe('planSummary', () => {
       '  - resource "aws_x" "two" {',
       '    }',
     ];
-    const groups = planSummary(lines);
+    const { groups } = planSummary(lines);
     assert.equal(groups.length, 1);
     assert.equal(groups[0].count, 2);
     const a = groups[0].children[0];
@@ -478,12 +488,12 @@ describe('planSummary', () => {
   });
 
   test('empty actions are omitted', () => {
-    const groups = planSummary(PLAN.slice(0, 14)); // only the read block
+    const { groups } = planSummary(PLAN.slice(0, 14)); // only the read block
     assert.deepEqual(groups.map((g) => g.action), ['read']);
   });
 
   test('no changes yields no groups', () => {
-    assert.deepEqual(planSummary(['No changes.']), []);
+    assert.deepEqual(planSummary(['No changes.']), { summary: null, groups: [] });
   });
 });
 

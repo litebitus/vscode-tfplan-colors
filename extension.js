@@ -142,6 +142,7 @@ class PlanSummaryProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+    this._summary = null;
     this._groups = [];
     this._uri = null;
   }
@@ -163,18 +164,35 @@ class PlanSummaryProvider {
     }
     const lines = [];
     for (let i = 0; i < editor.document.lineCount; i++) lines.push(editor.document.lineAt(i).text);
-    this._groups = planSummary(lines);
+    const { summary, groups } = planSummary(lines);
+    this._summary = summary;
+    this._groups = groups;
     this._uri = editor.document.uri;
     this._onDidChangeTreeData.fire(undefined);
   }
 
   getChildren(el) {
-    if (!el) return this._groups.map((g) => ({ type: 'group', ...g }));
+    if (!el) {
+      const roots = this._groups.map((g) => ({ type: 'group', ...g }));
+      if (this._summary) roots.unshift({ type: 'summaryLine', ...this._summary });
+      return roots;
+    }
     // action flows down the tree so every level can carry the group's color
     return (el.children || []).map((c) => ({ ...c, action: el.action }));
   }
 
   getTreeItem(el) {
+    if (el.type === 'summaryLine') {
+      const item = new vscode.TreeItem(el.text, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon('info');
+      item.tooltip = el.text;
+      item.command = {
+        command: 'vscode.open',
+        title: 'Reveal in plan',
+        arguments: [this._uri, { selection: new vscode.Range(el.line, 0, el.line, 0) }],
+      };
+      return item;
+    }
     const [icon, color] = ACTION_ICONS[el.action];
     if (el.type === 'group') {
       const item = new vscode.TreeItem(

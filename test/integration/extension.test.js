@@ -158,18 +158,22 @@ suite('plan summary view', () => {
     return ext.exports._test;
   }
 
-  test('groups resources by action in severity order', async () => {
+  test('summary line first, then groups by action in severity order', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');
-    const groups = await waitFor(async () => {
+    const roots = await waitFor(async () => {
       const g = await api.summaryChildren();
-      return g.length === 6 ? g : null;
+      return g.length === 7 ? g : null;
     });
+    assert.strictEqual(roots[0].type, 'summaryLine');
+    const summaryItem = api.summaryItem(roots[0]);
+    assert.strictEqual(summaryItem.label, 'Plan: 1 to add, 2 to change, 2 to destroy.');
+    assert.strictEqual(summaryItem.command.arguments[1].selection.start.line, 48);
     assert.deepStrictEqual(
-      groups.map((g) => g.action),
+      roots.slice(1).map((g) => g.action),
       ['replace', 'destroy', 'create', 'update', 'read', 'forget']
     );
-    const item = api.summaryItem(groups[0]);
+    const item = api.summaryItem(roots[1]);
     assert.strictEqual(item.label, 'replace (1)');
     assert.strictEqual(item.iconPath.id, 'arrow-swap');
   });
@@ -177,11 +181,11 @@ suite('plan summary view', () => {
   test('resource items reveal their block in the plan', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');
-    const groups = await waitFor(async () => {
+    const roots = await waitFor(async () => {
       const g = await api.summaryChildren();
-      return g.length === 6 ? g : null;
+      return g.length === 7 ? g : null;
     });
-    const [resource] = api.summaryChildren(groups[0]);
+    const [resource] = api.summaryChildren(roots[1]);
     const item = api.summaryItem(resource);
     assert.strictEqual(item.label, 'aws_security_group.sg');
     assert.strictEqual(item.command.command, 'vscode.open');
@@ -191,11 +195,11 @@ suite('plan summary view', () => {
   test('module resources nest under module nodes with leaf labels', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');
-    const groups = await waitFor(async () => {
+    const roots = await waitFor(async () => {
       const g = await api.summaryChildren();
-      return g.length === 6 ? g : null;
+      return g.length === 7 ? g : null;
     });
-    const read = groups.find((g) => g.action === 'read');
+    const read = roots.find((g) => g.action === 'read');
     const [moduleNode] = api.summaryChildren(read);
     assert.strictEqual(api.summaryItem(moduleNode).label, 'module.app');
     const [resource] = api.summaryChildren(moduleNode);

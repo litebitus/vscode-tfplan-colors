@@ -252,7 +252,7 @@ function planPathFrom(renderedPath) {
 const ACTION_ORDER = ['replace', 'destroy', 'create', 'update', 'read', 'forget'];
 
 function planSummary(lines) {
-  const { headers } = parsePlanStructure(lines);
+  const { headers, planLine } = parsePlanStructure(lines);
   const byAction = new Map();
   for (const h of headers) {
     if (!byAction.has(h.action)) byAction.set(h.action, { count: 0, children: [] });
@@ -275,10 +275,14 @@ function planSummary(lines) {
       line: h.line,
     });
   }
-  return ACTION_ORDER.filter((a) => byAction.has(a)).map((action) => ({
-    action,
-    ...byAction.get(action),
-  }));
+  return {
+    // terraform's own "Plan: N to add..." line — the truest brief summary
+    summary: planLine >= 0 ? { text: lines[planLine].trim(), line: planLine } : null,
+    groups: ACTION_ORDER.filter((a) => byAction.has(a)).map((action) => ({
+      action,
+      ...byAction.get(action),
+    })),
+  };
 }
 
 // Resolve which resource block a line belongs to (header line included).
