@@ -1,3 +1,7 @@
+## 1.4.3 (2026-07-06)
+
+- fix: key summary refresh suppression on document instance, not uri+version
+
 ## 1.4.2 (2026-07-06)
 
 - fix: per-document debounce so chatty documents can't drop summary refreshes
