@@ -13,6 +13,7 @@ const {
   planSymbols,
   foldingRanges,
   resourceAtLine,
+  heredocMask,
   renderedPathFor,
   planPathFrom,
   planSummary,
@@ -417,6 +418,44 @@ describe('foldingRanges', () => {
 
   test('empty input yields no ranges', () => {
     assert.deepEqual(foldingRanges([]), []);
+  });
+});
+
+describe('heredocMask', () => {
+  const HEREDOC_PLAN = [
+    /* 0*/ '  # aws_codebuild_project.ci will be created',
+    /* 1*/ '  + resource "aws_codebuild_project" "ci" {',
+    /* 2*/ '      + buildspec = <<-EOT',
+    /* 3*/ '            "artifacts":',
+    /* 4*/ '              "files":',
+    /* 5*/ '              - "**/*"',
+    /* 6*/ '              - "second item"',
+    /* 7*/ '            # aws_fake.resource will be destroyed',
+    /* 8*/ '        EOT',
+    /* 9*/ '      + type = "CODEPIPELINE"',
+    /*10*/ '    }',
+  ];
+
+  test('masks heredoc content and terminator, not the opener', () => {
+    const mask = heredocMask(HEREDOC_PLAN);
+    assert.deepEqual(mask, [false, false, false, true, true, true, true, true, true, false, false]);
+  });
+
+  test('heredoc content is not classified as headers or resources', () => {
+    const { headers } = parsePlanStructure(HEREDOC_PLAN);
+    assert.deepEqual(headers.map((h) => h.address), ['aws_codebuild_project.ci']);
+  });
+
+  test('terminator with trailing comma closes the heredoc', () => {
+    const mask = heredocMask(['      + <<-EOT', '        - yaml item', '        EOT,', '      + next = 1']);
+    assert.deepEqual(mask, [false, true, true, false]);
+  });
+
+  test('lines after the heredoc classify normally', () => {
+    const { summary, groups } = planSummary([...HEREDOC_PLAN, '', 'Plan: 1 to add, 0 to change, 0 to destroy.']);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].action, 'create');
+    assert.ok(summary);
   });
 });
 

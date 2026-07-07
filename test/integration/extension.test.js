@@ -107,6 +107,36 @@ suite('editor defaults', () => {
   });
 });
 
+suite('heredoc content', () => {
+  async function testApi() {
+    const ext = vscode.extensions.getExtension('lite2073.tfplan-colors');
+    await ext.activate();
+    return ext.exports._test;
+  }
+
+  test('heredoc strings produce no symbols or summary entries', async () => {
+    const api = await testApi();
+    const doc = await openDoc('heredoc.tfplan');
+
+    const symbols = await waitFor(async () => {
+      const s = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', doc.uri);
+      return s && s.length ? s : null;
+    });
+    const resourceNames = symbols.filter((s) => s.kind !== vscode.SymbolKind.Event).map((s) => s.name);
+    assert.deepStrictEqual(resourceNames, ['+ aws_codebuild_project.ci']);
+    assert.equal(resourceNames.some((n) => n.includes('aws_fake')), false);
+
+    const roots = await waitFor(async () => {
+      const g = api.summaryChildren();
+      return g.some((x) => x.action === 'create') ? g : null;
+    });
+    assert.deepStrictEqual(
+      roots.filter((r) => r.type === 'group').map((g) => [g.action, g.count]),
+      [['create', 1]]
+    );
+  });
+});
+
 suite('navigation resolution', () => {
   test('generic open with a selection lands on the requested line', async () => {
     // exercises the editor-resolver path that outline clicks use — a

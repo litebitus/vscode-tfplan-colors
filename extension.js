@@ -5,6 +5,7 @@ const path = require('path');
 const {
   ACTION_MARKER,
   scanLine,
+  heredocMask,
   planSymbols,
   foldingRanges,
   resourceAtLine,
@@ -97,8 +98,12 @@ function updateDecorations(editor) {
   }
 
   if (isPlanDoc(doc)) {
-    for (let i = 0; i < doc.lineCount; i++) {
-      const text = doc.lineAt(i).text;
+    const lines = [];
+    for (let i = 0; i < doc.lineCount; i++) lines.push(doc.lineAt(i).text);
+    const mask = heredocMask(lines);
+    for (let i = 0; i < lines.length; i++) {
+      if (mask[i]) continue;
+      const text = lines[i];
       const s = scanLine(text);
       if (!s) continue;
       const range = new vscode.Range(i, 0, i, text.length);

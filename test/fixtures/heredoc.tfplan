@@ -1,0 +1,18 @@
+Terraform will perform the following actions:
+
+  # aws_codebuild_project.ci will be created
+  + resource "aws_codebuild_project" "ci" {
+      + buildspec = <<-EOT
+            "artifacts":
+              "files":
+              - "**/*"
+            "phases":
+              "build":
+                "commands":
+                - "make build"
+            # aws_fake.resource will be destroyed
+        EOT
+      + type = "CODEPIPELINE"
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.

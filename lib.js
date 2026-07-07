@@ -87,13 +87,37 @@ function buildRenderError(stderr, fallbackMessage) {
   return `Failed to render plan with 'terraform show':\n\n${hint}${stderr || fallbackMessage}`;
 }
 
+// Heredoc values (<<EOT ... EOT) embed arbitrary text — YAML lists, shell,
+// JSON — whose lines must not be classified as diff markers or headers.
+// Returns a boolean per line: true = inside heredoc content (terminator
+// line included; the opener is a regular diff line).
+const HEREDOC_START_RE = /<<-?([A-Za-z_][A-Za-z0-9_]*)\s*$/;
+
+function heredocMask(lines) {
+  const mask = new Array(lines.length).fill(false);
+  let delim = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (delim) {
+      mask[i] = true;
+      const t = lines[i].trim();
+      if (t === delim || t === `${delim},`) delim = null;
+      continue;
+    }
+    const m = lines[i].match(HEREDOC_START_RE);
+    if (m) delim = m[1];
+  }
+  return mask;
+}
+
 // Scan all lines into the plan's structure: resource headers, the outputs
 // section, and the summary line.
 function parsePlanStructure(lines) {
   const headers = []; // { line, address, action }
   let outputsLine = -1;
   let planLine = -1;
+  const mask = heredocMask(lines);
   lines.forEach((text, i) => {
+    if (mask[i]) return;
     const h = text.match(HEADER_RE);
     if (h) {
       const action = headerAction(h[3]);
@@ -359,6 +383,7 @@ module.exports = {
   isZipMagic,
   timestampPlanName,
   buildRenderError,
+  heredocMask,
   parsePlanStructure,
   splitAddress,
   planSymbols,
