@@ -1,3 +1,7 @@
+## 1.4.4 (2026-07-07)
+
+- fix: don't classify heredoc string content as diff markers or headers
+
 ## 1.4.3 (2026-07-06)
 
 - fix: key summary refresh suppression on document instance, not uri+version
