@@ -1,3 +1,7 @@
+## 1.5.0 (2026-07-07)
+
+- feat: sync plan summary selection with editor position; leveled debug logging
+
 ## 1.4.4 (2026-07-07)
 
 - fix: don't classify heredoc string content as diff markers or headers
