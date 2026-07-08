@@ -149,6 +149,7 @@ class PlanSummaryProvider {
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
     this._summary = null;
     this._groups = [];
+    this._lines = [];
     this._uri = null;
     this._doc = null;
     this._docVersion = -1;
@@ -184,8 +185,60 @@ class PlanSummaryProvider {
     const { summary, groups } = planSummary(lines);
     this._summary = summary;
     this._groups = groups;
+    this._lines = lines;
     this._uri = editor.document.uri;
+    this._lastReveal = null;
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  getParent(el) {
+    return el._parent;
+  }
+
+  // reveal-and-select the resource containing the given line — keeps the
+  // summary in sync with what's being reviewed in the editor
+  revealLine(treeView, editor, line) {
+    if (!this._uri || this._uri.toString() !== editor.document.uri.toString()) {
+      logDebug(`summary sync: uri mismatch (summary=${this._uri}, editor=${editor.document.uri})`);
+      return;
+    }
+    let el = null;
+    const hit = resourceAtLine(this._lines, line);
+    if (hit) {
+      const walk = (elements) => {
+        for (const n of elements) {
+          if (n.type === 'resource' && n.address === hit.address) return n;
+          const found = walk(this.getChildren(n));
+          if (found) return found;
+        }
+        return null;
+      };
+      el = walk(this.getChildren());
+      if (!el) logDebug(`summary sync: no tree element for ${hit.address}`);
+    } else if (this._summary && line >= this._summary.line) {
+      // at or past terraform's "Plan: ..." line — highlight the summary row
+      el = this.getChildren().find((n) => n.type === 'summaryLine');
+    } else {
+      logDebug(`summary sync: no resource at line ${line}`);
+    }
+    if (!el) return;
+    if (this._lastReveal === el._id) return; // already selected — no churn
+    this._lastReveal = el._id;
+    logDebug(`summary sync: reveal ${el.address || el._id} (line ${line})`);
+    // progressive reveal: expand ancestors top-down first — revealing a deep
+    // element directly fails with "Data tree node not found" when the widget
+    // hasn't materialized children of never-expanded parents
+    const chain = [];
+    for (let p = el._parent; p; p = p._parent) chain.unshift(p);
+    (async () => {
+      for (const ancestor of chain) {
+        await treeView.reveal(ancestor, { expand: true, focus: false, select: false });
+      }
+      await treeView.reveal(el, { select: true, focus: false, expand: true });
+    })().catch((err) => {
+      this._lastReveal = null; // allow retry on the next event
+      logDebug(`summary sync: reveal failed — ${err && err.message}`);
+    });
   }
 
   getChildren(el) {
@@ -196,11 +249,12 @@ class PlanSummaryProvider {
     }
     // action flows down for the group's color; _id gives every item a
     // stable identity (labels repeat across the tree, which breaks
-    // VSCode's label-derived tracking)
+    // VSCode's label-derived tracking); _parent supports getParent/reveal
     return (el.children || []).map((c) => ({
       ...c,
       action: el.action,
       _id: `${el._id}/${c.name || c.leaf}@${c.line ?? ''}`,
+      _parent: el,
     }));
   }
 
@@ -321,10 +375,19 @@ function planPathFor(previewUri) {
   return planPathFrom(previewUri.fsPath);
 }
 
+// Leveled logging: info = lifecycle and errors (default visibility);
+// debug = chatty per-scroll/per-event tracing. Users raise the level via
+// "Developer: Set Log Level" — no rebuild needed to diagnose.
 let logChannel;
+function channel() {
+  if (!logChannel) logChannel = vscode.window.createOutputChannel('Terraform Plan Colors', { log: true });
+  return logChannel;
+}
 function log(msg) {
-  if (!logChannel) logChannel = vscode.window.createOutputChannel('Terraform Plan Colors');
-  logChannel.appendLine(`[${new Date().toISOString()}] ${msg}`);
+  channel().info(msg);
+}
+function logDebug(msg) {
+  channel().debug(msg);
 }
 
 function isBinaryPlan(fsPath) {
@@ -357,13 +420,13 @@ class PlanShowProvider {
     const watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file))
     );
-    log(`watch attached: ${file}`);
+    logDebug(`watch attached: ${file}`);
     let timer;
     const refresh = (kind) => {
-      log(`watcher event (${kind}): ${file}`);
+      logDebug(`watcher event (${kind}): ${file}`);
       clearTimeout(timer);
       timer = setTimeout(() => {
-        log(`firing onDidChange: ${previewUri.toString()}`);
+        logDebug(`firing onDidChange: ${previewUri.toString()}`);
         this._onDidChange.fire(previewUri);
       }, 500);
     };
@@ -379,7 +442,7 @@ class PlanShowProvider {
   }
 
   refresh(previewUri) {
-    log(`explicit refresh: ${previewUri.toString()}`);
+    logDebug(`explicit refresh: ${previewUri.toString()}`);
     this._onDidChange.fire(previewUri);
   }
 
@@ -490,6 +553,17 @@ function activate(context) {
   const summaryProvider = new PlanSummaryProvider();
   // createTreeView (vs registerTreeDataProvider) exposes .visible for tests
   const summaryTree = vscode.window.createTreeView('tfplanSummary', { treeDataProvider: summaryProvider });
+  let summarySyncTimer;
+  let lastCursorSyncAt = 0;
+  function scheduleSummarySync(editor, line) {
+    // plan-doc check first, and NEVER log in the reject paths: these fire
+    // for every editor including output channels — logging there appends to
+    // the channel, which scrolls it, which fires again (feedback loop)
+    if (!isPlanDoc(editor.document)) return;
+    if (!summaryTree.visible) return;
+    clearTimeout(summarySyncTimer);
+    summarySyncTimer = setTimeout(() => summaryProvider.revealLine(summaryTree, editor, line), 150);
+  }
   const flashType = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
     isWholeLine: true,
@@ -566,7 +640,23 @@ function activate(context) {
       await vscode.env.clipboard.writeText(currentAddress);
       vscode.window.setStatusBarMessage(`Copied: ${currentAddress}`, 2000);
     }),
-    vscode.window.onDidChangeTextEditorSelection((e) => updateAddressItem(e.textEditor)),
+    vscode.window.onDidChangeTextEditorSelection((e) => {
+      updateAddressItem(e.textEditor);
+      if (e.textEditor === vscode.window.activeTextEditor) {
+        lastCursorSyncAt = Date.now();
+        scheduleSummarySync(e.textEditor, e.selections[0].active.line);
+      }
+    }),
+    // scrolling: mirror what sticky scroll shows — the resource at the top
+    // of the viewport — as the selected item in the Plan Summary. Cursor
+    // moves scroll the editor too; the cursor's target must not be
+    // overridden by the scroll event it caused, hence the grace window.
+    vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+      if (e.textEditor !== vscode.window.activeTextEditor) return;
+      if (Date.now() - lastCursorSyncAt < 600) return;
+      const range = e.visibleRanges[0];
+      if (range) scheduleSummarySync(e.textEditor, range.start.line);
+    }),
     flashType,
     // flash the landing line on programmatic navigation (outline click,
     // go-to-symbol) so the jump target is obvious in a long plan
@@ -642,6 +732,7 @@ function activate(context) {
       summaryChildren: (el) => summaryProvider.getChildren(el),
       summaryItem: (el) => summaryProvider.getTreeItem(el),
       summaryViewVisible: () => summaryTree.visible,
+      summarySelection: () => summaryTree.selection,
       flashCount: () => flashCount,
     },
   };

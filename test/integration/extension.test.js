@@ -329,6 +329,24 @@ suite('plan summary view', () => {
     await waitFor(() => api.summaryViewVisible());
   });
 
+  test('editor position syncs the selected summary item', async () => {
+    const api = await testApi();
+    const doc = await openDoc('sample.tfplan');
+    await vscode.commands.executeCommand('tfplanColors.showSummary');
+    await waitFor(() => api.summaryViewVisible());
+    const editor = await vscode.window.showTextDocument(doc);
+    editor.selection = new vscode.Selection(35, 4, 35, 4); // inside the aws_thing.cfg block
+    await waitFor(() => {
+      const [sel] = api.summarySelection();
+      return sel && sel.type === 'resource' && sel.address === 'aws_thing.cfg';
+    });
+    editor.selection = new vscode.Selection(48, 0, 48, 0); // the Plan: summary line
+    await waitFor(() => {
+      const [sel] = api.summarySelection();
+      return sel && sel.type === 'summaryLine';
+    });
+  });
+
   test('view hides when all plan editors are closed', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');

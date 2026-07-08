@@ -68,7 +68,9 @@ whenever a plan document is active: terraform's `Plan: N to add...` line at
 the top, then resources grouped by action in severity order — replace, destroy, create, update, read, forget — so destructive
 changes surface first, with counts and color-coded icons per group.
 Within each group resources nest under their module chain, keeping every
-row short enough for the sidebar. Empty action groups are omitted. Clicking a resource reveals its block in the plan. Reach
+row short enough for the sidebar. Empty action groups are omitted.
+The view follows the editor: scrolling or moving the cursor highlights the
+resource currently under review. Clicking a resource reveals its block in the plan. Reach
 it via the list icon in the editor title or `Terraform Plan: Summarize Plan`.
 
 ### Resource address in the status bar
