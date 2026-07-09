@@ -265,6 +265,18 @@ describe('parsePlanStructure', () => {
     assert.equal(s.outputsLine, 43);
     assert.equal(s.planLine, 48);
   });
+  test('matches addresses with colons in map keys', () => {
+    const lines = [
+      '  # github_repository_environment.athena_ddl["db-data-platform-rds:dev"] will be created',
+      '  + resource "github_repository_environment" "athena_ddl" {',
+      '    }',
+    ];
+    const { headers } = parsePlanStructure(lines);
+    assert.deepEqual(
+      headers.map((h) => [h.action, h.address]),
+      [['create', 'github_repository_environment.athena_ddl["db-data-platform-rds:dev"]']]
+    );
+  });
 });
 
 describe('splitAddress', () => {

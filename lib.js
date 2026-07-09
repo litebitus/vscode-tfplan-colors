@@ -15,7 +15,7 @@ const ACTION_MARKER = {
 //   # module.a.aws_x.y will be created
 //   # aws_x.y must be replaced
 //  # module.a.aws_x.y will no longer be managed by Terraform, ...
-const HEADER_RE = /^\s{0,3}# ([a-zA-Z][\w."'()\[\]/ -]*?) (will|must|is|has) (.+)$/;
+const HEADER_RE = /^\s{0,3}# ([a-zA-Z][\w."'()\[\]/: -]*?) (will|must|is|has) (.+)$/;
 
 function headerAction(rest) {
   // forget first: its phrasing ("...but will not be destroyed") would
