@@ -1,3 +1,7 @@
+## 1.5.1 (2026-07-09)
+
+- fix: close diff-suffixed heredoc terminators; materialize summary tree with stable element identity
+
 ## 1.5.0 (2026-07-07)
 
 - feat: sync plan summary selection with editor position; leveled debug logging
