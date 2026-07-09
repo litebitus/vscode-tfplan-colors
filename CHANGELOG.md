@@ -1,3 +1,7 @@
+## 1.5.2 (2026-07-09)
+
+- fix: match resource addresses with colons in map keys
+
 ## 1.5.1 (2026-07-09)
 
 - fix: close diff-suffixed heredoc terminators; materialize summary tree with stable element identity
