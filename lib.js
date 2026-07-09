@@ -91,7 +91,8 @@ function buildRenderError(stderr, fallbackMessage) {
 // JSON — whose lines must not be classified as diff markers or headers.
 // Returns a boolean per line: true = inside heredoc content (terminator
 // line included; the opener is a regular diff line).
-const HEREDOC_START_RE = /<<-?([A-Za-z_][A-Za-z0-9_]*)\s*$/;
+// opener may carry terraform's diff comment: `= <<-EOT # forces replacement`
+const HEREDOC_START_RE = /<<-?([A-Za-z_][A-Za-z0-9_]*)(?:\s+# forces replacement)?\s*$/;
 
 function heredocMask(lines) {
   const mask = new Array(lines.length).fill(false);
@@ -100,7 +101,14 @@ function heredocMask(lines) {
     if (delim) {
       mask[i] = true;
       const t = lines[i].trim();
-      if (t === delim || t === `${delim},`) delim = null;
+      // terminators carry diff suffixes in value diffs: "EOT -> null",
+      // "EOT -> (known after apply)", "EOT, # forces replacement"
+      if (t.startsWith(delim)) {
+        const rest = t.slice(delim.length);
+        if (rest === '' || rest === ',' || rest.startsWith(' ->') || rest.startsWith(', ') || rest.startsWith(' #')) {
+          delim = null;
+        }
+      }
       continue;
     }
     const m = lines[i].match(HEREDOC_START_RE);

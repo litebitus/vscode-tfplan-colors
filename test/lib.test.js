@@ -451,6 +451,36 @@ describe('heredocMask', () => {
     assert.deepEqual(mask, [false, true, true, false]);
   });
 
+  test('destroy-diff terminator "EOT -> null" closes the heredoc', () => {
+    const mask = heredocMask([
+      '      - cluster_public_key = <<-EOT',
+      '            ssh-rsa AAAA... Amazon-Redshift',
+      '        EOT -> null',
+      '      - cluster_revision_number = "331388" -> null',
+    ]);
+    assert.deepEqual(mask, [false, true, true, false]);
+  });
+
+  test('changed-value terminator "EOT -> (known after apply)" closes the heredoc', () => {
+    const mask = heredocMask(['~ x = <<-EOT', 'content', 'EOT -> (known after apply)', '~ y = 1 -> 2']);
+    assert.deepEqual(mask, [false, true, true, false]);
+  });
+
+  test('opener with "# forces replacement" comment still starts the heredoc', () => {
+    const mask = heredocMask([
+      '      ~ user_data = <<-EOT # forces replacement',
+      '        - some yaml item',
+      '        EOT',
+      '      ~ other = 1 -> 2',
+    ]);
+    assert.deepEqual(mask, [false, true, true, false]);
+  });
+
+  test('content lines merely containing the delimiter word do not close', () => {
+    const mask = heredocMask(['+ x = <<-EOT', 'EOTHER line', 'say EOT here', 'EOT', '+ y = 1']);
+    assert.deepEqual(mask, [false, true, true, true, false]);
+  });
+
   test('lines after the heredoc classify normally', () => {
     const { summary, groups } = planSummary([...HEREDOC_PLAN, '', 'Plan: 1 to add, 0 to change, 0 to destroy.']);
     assert.equal(groups.length, 1);

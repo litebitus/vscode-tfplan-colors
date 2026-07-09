@@ -148,7 +148,7 @@ class PlanSummaryProvider {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
     this._summary = null;
-    this._groups = [];
+    this._roots = [];
     this._lines = [];
     this._uri = null;
     this._doc = null;
@@ -184,10 +184,21 @@ class PlanSummaryProvider {
     for (let i = 0; i < editor.document.lineCount; i++) lines.push(editor.document.lineAt(i).text);
     const { summary, groups } = planSummary(lines);
     this._summary = summary;
-    this._groups = groups;
     this._lines = lines;
     this._uri = editor.document.uri;
     this._lastReveal = null;
+    // materialize the element tree ONCE per refresh: stable object identity
+    // across getChildren calls lets VSCode's own handle generation manage
+    // item identity (custom string ids proved fragile with repeated labels)
+    // and lets reveal() resolve elements by reference
+    const build = (node, parent, action) => {
+      const el = { ...node, action: action ?? node.action, _parent: parent };
+      el.childElements = (node.children || []).map((c) => build(c, el, el.action));
+      return el;
+    };
+    this._roots = [];
+    if (summary) this._roots.push({ type: 'summaryLine', ...summary, _parent: undefined, childElements: [] });
+    for (const g of groups) this._roots.push(build({ type: 'group', ...g }, undefined, g.action));
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -208,23 +219,23 @@ class PlanSummaryProvider {
       const walk = (elements) => {
         for (const n of elements) {
           if (n.type === 'resource' && n.address === hit.address) return n;
-          const found = walk(this.getChildren(n));
+          const found = walk(n.childElements);
           if (found) return found;
         }
         return null;
       };
-      el = walk(this.getChildren());
+      el = walk(this._roots || []);
       if (!el) logDebug(`summary sync: no tree element for ${hit.address}`);
     } else if (this._summary && line >= this._summary.line) {
       // at or past terraform's "Plan: ..." line — highlight the summary row
-      el = this.getChildren().find((n) => n.type === 'summaryLine');
+      el = (this._roots || []).find((n) => n.type === 'summaryLine');
     } else {
       logDebug(`summary sync: no resource at line ${line}`);
     }
     if (!el) return;
-    if (this._lastReveal === el._id) return; // already selected — no churn
-    this._lastReveal = el._id;
-    logDebug(`summary sync: reveal ${el.address || el._id} (line ${line})`);
+    if (this._lastReveal === el) return; // already selected — no churn
+    this._lastReveal = el;
+    logDebug(`summary sync: reveal ${el.address || el.name || el.type} (line ${line})`);
     // progressive reveal: expand ancestors top-down first — revealing a deep
     // element directly fails with "Data tree node not found" when the widget
     // hasn't materialized children of never-expanded parents
@@ -242,26 +253,13 @@ class PlanSummaryProvider {
   }
 
   getChildren(el) {
-    if (!el) {
-      const roots = this._groups.map((g) => ({ type: 'group', _id: g.action, ...g }));
-      if (this._summary) roots.unshift({ type: 'summaryLine', _id: 'plan-summary-line', ...this._summary });
-      return roots;
-    }
-    // action flows down for the group's color; _id gives every item a
-    // stable identity (labels repeat across the tree, which breaks
-    // VSCode's label-derived tracking); _parent supports getParent/reveal
-    return (el.children || []).map((c) => ({
-      ...c,
-      action: el.action,
-      _id: `${el._id}/${c.name || c.leaf}@${c.line ?? ''}`,
-      _parent: el,
-    }));
+    if (!el) return this._roots || [];
+    return el.childElements || [];
   }
 
   getTreeItem(el) {
     if (el.type === 'summaryLine') {
       const item = new vscode.TreeItem(el.text, vscode.TreeItemCollapsibleState.None);
-      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon('info');
       item.tooltip = el.text;
       item.command = {
@@ -277,18 +275,15 @@ class PlanSummaryProvider {
         `${el.action} (${el.count})`,
         vscode.TreeItemCollapsibleState.Expanded
       );
-      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
       return item;
     }
     if (el.type === 'module') {
       const item = new vscode.TreeItem(el.name, vscode.TreeItemCollapsibleState.Expanded);
-      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon('symbol-namespace');
       return item;
     }
     const item = new vscode.TreeItem(el.leaf, vscode.TreeItemCollapsibleState.None);
-    item.id = el._id;
     item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
     item.tooltip = el.address;
     item.command = {

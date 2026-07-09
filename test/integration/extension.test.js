@@ -114,7 +114,7 @@ suite('heredoc content', () => {
     return ext.exports._test;
   }
 
-  test('heredoc strings produce no symbols or summary entries', async () => {
+  test('heredoc strings produce no symbols, and parsing continues after diff-suffixed terminators', async () => {
     const api = await testApi();
     const doc = await openDoc('heredoc.tfplan');
 
@@ -123,7 +123,12 @@ suite('heredoc content', () => {
       return s && s.length ? s : null;
     });
     const resourceNames = symbols.filter((s) => s.kind !== vscode.SymbolKind.Event).map((s) => s.name);
-    assert.deepStrictEqual(resourceNames, ['+ aws_codebuild_project.ci']);
+    assert.deepStrictEqual(resourceNames, [
+      '+ aws_codebuild_project.ci',
+      '- aws_redshift_cluster.old',
+      // parsing must survive the destroy-diff terminator "EOT -> null" above
+      '+ aws_instance.after',
+    ]);
     assert.equal(resourceNames.some((n) => n.includes('aws_fake')), false);
 
     const roots = await waitFor(async () => {
@@ -132,8 +137,9 @@ suite('heredoc content', () => {
     });
     assert.deepStrictEqual(
       roots.filter((r) => r.type === 'group').map((g) => [g.action, g.count]),
-      [['create', 1]]
+      [['destroy', 1], ['create', 2]]
     );
+    assert.ok(roots.some((r) => r.type === 'summaryLine'));
   });
 });
 
@@ -245,26 +251,28 @@ suite('plan summary view', () => {
     await openDoc('repeated-modules.tfplan');
     const roots = await waitFor(async () => {
       const g = await api.summaryChildren();
-      return g.length === 2 && g[1].action === 'update' && g[1].count === 2 ? g : null;
+      return g.length === 2 && g[1].action === 'update' && g[1].count === 4 ? g : null;
     });
-    const ids = new Set();
+    const seen = new Set();
     let modules = 0;
-    const walk = (elements) => {
+    const walk = (elements, pathPrefix) => {
       for (const el of elements) {
         const item = api.summaryItem(el);
-        assert.ok(item.id, `missing id on ${item.label}`);
-        assert.ok(!ids.has(item.id), `duplicate id: ${item.id}`);
-        ids.add(item.id);
+        const path = `${pathPrefix}/${item.label}`;
+        assert.ok(!seen.has(path), `duplicate tree path: ${path}`);
+        seen.add(path);
         const children = api.summaryChildren(el);
         if (el.type === 'module') {
           modules++;
           assert.ok(children.length > 0, `module ${el.name} rendered empty`);
         }
-        walk(children);
+        // stable identity: repeated getChildren calls return the same objects
+        assert.strictEqual(api.summaryChildren(el)[0], children[0] ?? undefined);
+        walk(children, path);
       }
     };
-    walk(roots);
-    assert.strictEqual(modules, 4); // alpha, beta, and one inner[0] under each
+    walk(roots, '');
+    assert.strictEqual(modules, 8); // alpha/beta/gamma/delta, one inner[0] under each
   });
 
   test('summary re-parses when the document changes', async () => {

@@ -15,4 +15,17 @@ Terraform will perform the following actions:
       + type = "CODEPIPELINE"
     }
 
-Plan: 1 to add, 0 to change, 0 to destroy.
+  # aws_redshift_cluster.old will be destroyed
+  - resource "aws_redshift_cluster" "old" {
+      - cluster_public_key = <<-EOT
+            ssh-rsa AAAA-not-a-real-key Amazon-Redshift
+        EOT -> null
+      - cluster_type       = "single-node" -> null
+    }
+
+  # aws_instance.after will be created
+  + resource "aws_instance" "after" {
+      + ami = "ami-123"
+    }
+
+Plan: 2 to add, 0 to change, 1 to destroy.
