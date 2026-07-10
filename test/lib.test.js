@@ -265,16 +265,22 @@ describe('parsePlanStructure', () => {
     assert.equal(s.outputsLine, 43);
     assert.equal(s.planLine, 48);
   });
-  test('matches addresses with colons in map keys', () => {
+  test('matches addresses with colons and wildcards in map keys', () => {
     const lines = [
       '  # github_repository_environment.athena_ddl["db-data-platform-rds:dev"] will be created',
       '  + resource "github_repository_environment" "athena_ddl" {',
+      '    }',
+      '  # module.acm[0].aws_route53_record.validation["*.devops.example.com"] will be created',
+      '  + resource "aws_route53_record" "validation" {',
       '    }',
     ];
     const { headers } = parsePlanStructure(lines);
     assert.deepEqual(
       headers.map((h) => [h.action, h.address]),
-      [['create', 'github_repository_environment.athena_ddl["db-data-platform-rds:dev"]']]
+      [
+        ['create', 'github_repository_environment.athena_ddl["db-data-platform-rds:dev"]'],
+        ['create', 'module.acm[0].aws_route53_record.validation["*.devops.example.com"]'],
+      ]
     );
   });
 });
