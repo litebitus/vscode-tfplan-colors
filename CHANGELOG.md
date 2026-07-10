@@ -1,3 +1,7 @@
+## 1.5.3 (2026-07-10)
+
+- fix: match resource addresses with wildcards in map keys
+
 ## 1.5.2 (2026-07-09)
 
 - fix: match resource addresses with colons in map keys
