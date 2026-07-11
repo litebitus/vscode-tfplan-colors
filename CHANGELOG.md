@@ -1,3 +1,7 @@
+## 1.5.4 (2026-07-11)
+
+- fix: match resource addresses with arbitrary map keys
+
 ## 1.5.3 (2026-07-10)
 
 - fix: match resource addresses with wildcards in map keys
