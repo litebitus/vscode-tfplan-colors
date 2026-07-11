@@ -265,13 +265,16 @@ describe('parsePlanStructure', () => {
     assert.equal(s.outputsLine, 43);
     assert.equal(s.planLine, 48);
   });
-  test('matches addresses with colons and wildcards in map keys', () => {
+  test('matches addresses with arbitrary map keys (colons, wildcards, arrows)', () => {
     const lines = [
       '  # github_repository_environment.athena_ddl["db-data-platform-rds:dev"] will be created',
       '  + resource "github_repository_environment" "athena_ddl" {',
       '    }',
       '  # module.acm[0].aws_route53_record.validation["*.devops.example.com"] will be created',
       '  + resource "aws_route53_record" "validation" {',
+      '    }',
+      '  # module.conn[0].aws_vpc_security_group_egress_rule.this["devops-alb -> ecs:8080"] will be created',
+      '  + resource "aws_vpc_security_group_egress_rule" "this" {',
       '    }',
     ];
     const { headers } = parsePlanStructure(lines);
@@ -280,6 +283,7 @@ describe('parsePlanStructure', () => {
       [
         ['create', 'github_repository_environment.athena_ddl["db-data-platform-rds:dev"]'],
         ['create', 'module.acm[0].aws_route53_record.validation["*.devops.example.com"]'],
+        ['create', 'module.conn[0].aws_vpc_security_group_egress_rule.this["devops-alb -> ecs:8080"]'],
       ]
     );
   });
