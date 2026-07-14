@@ -1,3 +1,7 @@
+## 1.5.5 (2026-07-13)
+
+- fix: generation-scoped summary tree item ids to stop stale widget state across plans
+
 ## 1.5.4 (2026-07-11)
 
 - fix: match resource addresses with arbitrary map keys
