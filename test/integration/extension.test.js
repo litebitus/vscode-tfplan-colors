@@ -254,6 +254,7 @@ suite('plan summary view', () => {
       return g.length === 2 && g[1].action === 'update' && g[1].count === 4 ? g : null;
     });
     const seen = new Set();
+    const ids = new Set();
     let modules = 0;
     const walk = (elements, pathPrefix) => {
       for (const el of elements) {
@@ -261,6 +262,12 @@ suite('plan summary view', () => {
         const path = `${pathPrefix}/${item.label}`;
         assert.ok(!seen.has(path), `duplicate tree path: ${path}`);
         seen.add(path);
+        // per-generation explicit ids: defined and unique across the tree,
+        // so the widget never confuses nodes with cached state from
+        // another plan sharing the same module/leaf labels
+        assert.ok(typeof item.id === 'string' && item.id.length > 0, `missing id at ${path}`);
+        assert.ok(!ids.has(item.id), `duplicate item id: ${item.id}`);
+        ids.add(item.id);
         const children = api.summaryChildren(el);
         if (el.type === 'module') {
           modules++;
@@ -287,11 +294,12 @@ suite('plan summary view', () => {
       ].join('\n'),
     });
     const editor = await vscode.window.showTextDocument(doc);
-    await waitFor(async () => {
+    const before = await waitFor(async () => {
       const roots = api.summaryChildren();
       const create = roots.find((g) => g.action === 'create');
-      return create && create.count === 1;
+      return create && create.count === 1 ? create : null;
     });
+    const beforeId = api.summaryItem(before).id;
     await editor.edit((b) =>
       b.insert(new vscode.Position(doc.lineCount, 0), [
         '  # aws_instance.two will be destroyed',
@@ -305,6 +313,10 @@ suite('plan summary view', () => {
       const destroy = roots.find((g) => g.action === 'destroy');
       return destroy && destroy.count === 1;
     });
+    // ids are generation-scoped (uri#version): the same logical node gets
+    // a fresh id after a re-parse, discarding any stale widget state
+    const after = api.summaryChildren().find((g) => g.action === 'create');
+    assert.notStrictEqual(api.summaryItem(after).id, beforeId);
   });
 
   test('summary re-parses a file changed on disk between close and reopen', async () => {

@@ -188,16 +188,23 @@ class PlanSummaryProvider {
     this._uri = editor.document.uri;
     this._lastReveal = null;
     // materialize the element tree ONCE per refresh: stable object identity
-    // across getChildren calls lets VSCode's own handle generation manage
-    // item identity (custom string ids proved fragile with repeated labels)
-    // and lets reveal() resolve elements by reference
+    // across getChildren calls lets reveal() resolve elements by reference.
+    // Every element carries an _id unique to this (document, version)
+    // generation: the tree widget persists render/expansion state keyed by
+    // item identity, and label-derived handles collide across plans that
+    // share module names (schema_validation_gate & co.), resurrecting stale
+    // widget state — subtrees render empty until a later refresh heals them
+    const gen = `${editor.document.uri.toString()}#${editor.document.version}`;
     const build = (node, parent, action) => {
       const el = { ...node, action: action ?? node.action, _parent: parent };
+      el._id = `${parent ? parent._id : gen}/${node.name || node.leaf || node.action}@${node.line ?? ''}`;
       el.childElements = (node.children || []).map((c) => build(c, el, el.action));
       return el;
     };
     this._roots = [];
-    if (summary) this._roots.push({ type: 'summaryLine', ...summary, _parent: undefined, childElements: [] });
+    if (summary) {
+      this._roots.push({ type: 'summaryLine', ...summary, _id: `${gen}/plan-summary-line`, _parent: undefined, childElements: [] });
+    }
     for (const g of groups) this._roots.push(build({ type: 'group', ...g }, undefined, g.action));
     this._onDidChangeTreeData.fire(undefined);
   }
@@ -260,6 +267,7 @@ class PlanSummaryProvider {
   getTreeItem(el) {
     if (el.type === 'summaryLine') {
       const item = new vscode.TreeItem(el.text, vscode.TreeItemCollapsibleState.None);
+      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon('info');
       item.tooltip = el.text;
       item.command = {
@@ -275,15 +283,18 @@ class PlanSummaryProvider {
         `${el.action} (${el.count})`,
         vscode.TreeItemCollapsibleState.Expanded
       );
+      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
       return item;
     }
     if (el.type === 'module') {
       const item = new vscode.TreeItem(el.name, vscode.TreeItemCollapsibleState.Expanded);
+      item.id = el._id;
       item.iconPath = new vscode.ThemeIcon('symbol-namespace');
       return item;
     }
     const item = new vscode.TreeItem(el.leaf, vscode.TreeItemCollapsibleState.None);
+    item.id = el._id;
     item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
     item.tooltip = el.address;
     item.command = {
