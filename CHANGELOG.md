@@ -1,3 +1,7 @@
+## 1.6.0 (2026-07-15)
+
+- feat: color terraform line-diff markers inside updated heredocs
+
 ## 1.5.6 (2026-07-14)
 
 - fix: refresh tree and retry once when summary reveal hits a dropped widget node
