@@ -248,14 +248,29 @@ class PlanSummaryProvider {
     // hasn't materialized children of never-expanded parents
     const chain = [];
     for (let p = el._parent; p; p = p._parent) chain.unshift(p);
-    (async () => {
+    const roots = this._roots;
+    const revealChain = async () => {
       for (const ancestor of chain) {
         await treeView.reveal(ancestor, { expand: true, focus: false, select: false });
       }
       await treeView.reveal(el, { select: true, focus: false, expand: true });
+    };
+    (async () => {
+      try {
+        await revealChain();
+      } catch (err) {
+        // the widget can drop freshly-built subtrees on first paint
+        // ("Data tree node not found" while our data holds the node) —
+        // force a rebuild from the intact element tree and retry once
+        logDebug(`summary sync: reveal failed — ${err && err.message}; refreshing widget and retrying`);
+        this._onDidChangeTreeData.fire(undefined);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (this._roots !== roots) return; // a re-parse superseded this tree
+        await revealChain();
+      }
     })().catch((err) => {
       this._lastReveal = null; // allow retry on the next event
-      logDebug(`summary sync: reveal failed — ${err && err.message}`);
+      logDebug(`summary sync: reveal retry failed — ${err && err.message}`);
     });
   }
 
@@ -737,6 +752,7 @@ function activate(context) {
       addressItemVisible: () => addressItemVisible,
       summaryChildren: (el) => summaryProvider.getChildren(el),
       summaryItem: (el) => summaryProvider.getTreeItem(el),
+      summaryRevealLine: (treeView, editor, line) => summaryProvider.revealLine(treeView, editor, line),
       summaryViewVisible: () => summaryTree.visible,
       summarySelection: () => summaryTree.selection,
       flashCount: () => flashCount,

@@ -367,6 +367,35 @@ suite('plan summary view', () => {
     });
   });
 
+  test('reveal failure refreshes the tree and retries the chain once', async () => {
+    const api = await testApi();
+    const doc = await openDoc('sample.tfplan');
+    const editor = await vscode.window.showTextDocument(doc);
+    await waitFor(() => api.summaryChildren().length > 0);
+    // a view whose first reveal fails the way Antigravity's widget does
+    // when it drops a freshly-built subtree on initial paint
+    const calls = [];
+    let failedOnce = false;
+    const mockView = {
+      reveal: async (el, opts) => {
+        if (!failedOnce) {
+          failedOnce = true;
+          throw new Error('Data tree node not found');
+        }
+        calls.push({ el, opts });
+      },
+    };
+    api.summaryRevealLine(mockView, editor, 10); // inside module.app.data.aws_ami.base
+    // the retry replays the full chain: read group, module.app, then the leaf
+    await waitFor(() => calls.length === 3);
+    assert.strictEqual(api.summaryItem(calls[0].el).label, 'read (1)');
+    assert.strictEqual(calls[0].opts.expand, true);
+    assert.strictEqual(calls[0].opts.select, false);
+    assert.strictEqual(calls[1].el.name, 'module.app');
+    assert.strictEqual(calls[2].el.address, 'module.app.data.aws_ami.base');
+    assert.strictEqual(calls[2].opts.select, true);
+  });
+
   test('view hides when all plan editors are closed', async () => {
     const api = await testApi();
     await openDoc('sample.tfplan');
