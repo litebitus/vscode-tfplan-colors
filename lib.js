@@ -98,9 +98,35 @@ function buildRenderError(stderr, fallbackMessage) {
 // opener may carry terraform's diff comment: `= <<-EOT # forces replacement`
 const HEREDOC_START_RE = /<<-?([A-Za-z_][A-Za-z0-9_]*)(?:\s+# forces replacement)?\s*$/;
 
+// A ~ (updated) heredoc embeds terraform's own line diff: +/- markers at ONE
+// fixed column strictly left of every content line (the renderer prefixes
+// content with a 2-wide no-op symbol where the marker would sit). So per
+// block, the leftmost non-blank column is the marker column, and only lines
+// carrying `+ `/`- ` exactly there are diff lines — content (list dashes,
+// zero-indent keys) can never reach it, at any nesting depth or spacing.
 function heredocMask(lines) {
   const mask = new Array(lines.length).fill(false);
   let delim = null;
+  let innerDiff = false;
+  let block = []; // content-line indices of the current ~ heredoc
+
+  // second pass over a completed ~ heredoc: unmask its diff-marker lines
+  const unmaskMarkers = () => {
+    let markerCol = Infinity;
+    for (const i of block) {
+      if (lines[i].trim() === '') continue;
+      markerCol = Math.min(markerCol, lines[i].match(/^ */)[0].length);
+    }
+    for (const i of block) {
+      const t = lines[i];
+      const col = t.match(/^ */)[0].length;
+      if (col === markerCol && (t[col] === '+' || t[col] === '-') && t[col + 1] === ' ') {
+        mask[i] = false; // a real terraform line-diff marker — classify/color it
+      }
+    }
+    block = [];
+  };
+
   for (let i = 0; i < lines.length; i++) {
     if (delim) {
       mask[i] = true;
@@ -111,13 +137,26 @@ function heredocMask(lines) {
         const rest = t.slice(delim.length);
         if (rest === '' || rest === ',' || rest.startsWith(' ->') || rest.startsWith(', ') || rest.startsWith(' #')) {
           delim = null;
+          // `EOT -> ...` closes a whole-value rendering (the old value shown
+          // plain, no inner markers) — its content must stay fully masked
+          if (innerDiff && !rest.startsWith(' ->')) unmaskMarkers();
+          innerDiff = false;
+          block = [];
+          continue;
         }
       }
+      block.push(i);
       continue;
     }
     const m = lines[i].match(HEREDOC_START_RE);
-    if (m) delim = m[1];
+    if (m) {
+      delim = m[1];
+      // only a ~ (updated) heredoc embeds an inner line diff
+      innerDiff = classifyLine(lines[i]) === 'update';
+      block = [];
+    }
   }
+  if (delim && innerDiff) unmaskMarkers(); // truncated plan: classify what we have
   return mask;
 }
 

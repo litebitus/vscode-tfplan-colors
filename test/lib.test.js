@@ -1,5 +1,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   headerAction,
   classifyLine,
@@ -491,11 +493,30 @@ describe('heredocMask', () => {
   test('opener with "# forces replacement" comment still starts the heredoc', () => {
     const mask = heredocMask([
       '      ~ user_data = <<-EOT # forces replacement',
-      '        - some yaml item',
+      '          - removed-mock-line',
+      '            kept mock content',
       '        EOT',
       '      ~ other = 1 -> 2',
     ]);
-    assert.deepEqual(mask, [false, true, true, false]);
+    assert.deepEqual(mask, [false, false, true, true, false]);
+  });
+
+  test('~ heredoc truncated at EOF still classifies markers', () => {
+    const mask = heredocMask([
+      '      ~ content = <<-EOT',
+      '          - removed-mock-line',
+      '            kept-mock-line',
+    ]);
+    assert.deepEqual(mask, [false, false, true]);
+  });
+
+  test('create heredoc never unmasks inner dashes even at the marker column', () => {
+    const mask = heredocMask([
+      '      + buildspec = <<-EOT',
+      '          - "**/*"',
+      '        EOT',
+    ]);
+    assert.deepEqual(mask, [false, true, true]);
   });
 
   test('content lines merely containing the delimiter word do not close', () => {
@@ -508,6 +529,91 @@ describe('heredocMask', () => {
     assert.equal(groups.length, 1);
     assert.equal(groups[0].action, 'create');
     assert.ok(summary);
+  });
+});
+
+// Every heredoc-diff variation terraform renders, crystallized from real
+// plan output (columns preserved): inline diffs over yamlencode docs,
+// zero-indent shell/buildspec/list content, whole-value renderings
+// (`EOT -> ...`), and create/destroy heredocs. The fixture is the contract:
+// marker lines color, content lines never do.
+describe('heredocMask: rendered heredoc-diff fixture', () => {
+  const FIX = fs
+    .readFileSync(path.join(__dirname, 'fixtures', 'heredoc-diffs.tfplan'), 'utf8')
+    .split('\n');
+  const mask = heredocMask(FIX);
+  const idx = (s) => {
+    const hits = FIX.map((l, i) => (l.trim() === s ? i : -1)).filter((i) => i >= 0);
+    assert.equal(hits.length, 1, `fixture line not found or ambiguous: ${s}`);
+    return hits[0];
+  };
+
+  // [line, expected action] — the full colored set, nothing more, nothing less
+  const MARKERS = [
+    ['-   "channel": "stable"', 'destroy'],
+    ['+   "channel": "mock-channel"', 'create'],
+    ['-   "configBase": "s3://mock-old-bucket/cluster"', 'destroy'],
+    ['+   "configBase": "s3://mock-new-bucket/kops/cluster"', 'create'],
+    ['-   - "instanceGroup": "mock-cp-b"', 'destroy'],
+    ['-     "name": "b"', 'destroy'],
+    ['-     "legacy": false', 'destroy'],
+    ['+     "legacy": true', 'create'],
+    ['+   "mockMapList":', 'create'],
+    ['+   - "mockKey": "mock-value-1"', 'create'],
+    ['+     "mockPeer": "mock-peer-1"', 'create'],
+    ['+   "sshAccess":', 'create'],
+    ['+   - "192.0.2.0/24"', 'create'],
+    ['- yum install -y mock-pkg', 'destroy'],
+    ['+ systemctl enable mock-svc', 'create'],
+    ['- version: 0.2', 'destroy'],
+    ['+ version: 0.3', 'create'],
+    ['- stale-zero-indent-line', 'destroy'],
+    ['- old-mock-line-1', 'destroy'],
+    ['+ new-mock-line-1', 'create'],
+    ['- old-mock-line-2', 'destroy'],
+    ['+ new-mock-line-2', 'create'],
+  ];
+
+  const CONTENT = [
+    '"apiVersion": "mock.io/v1"',
+    '"spec":',
+    '- "etcdMembers":',
+    '- "instanceGroup": "mock-cp-a"',
+    '"name": "a"',
+    '#!/bin/bash',
+    '- echo mock-build',
+    '- keep-item-1',
+    '- keep-item-2',
+    '- old-item-1',      // whole-value rendering: EOT -> (known after apply)
+    'old-plain-line',
+    '- destroyed-list-item', // destroy heredoc: EOT -> null
+    'destroyed-plain-line',
+    '- created-list-item',   // create heredoc
+    'version: 0.2',
+  ];
+
+  test('every marker line colors with its action', () => {
+    for (const [line, action] of MARKERS) {
+      const i = idx(line);
+      assert.equal(mask[i], false, `should be unmasked: ${line}`);
+      assert.equal(classifyLine(FIX[i]), action, line);
+    }
+  });
+
+  test('every content line stays masked — list dashes included', () => {
+    for (const line of CONTENT) {
+      assert.equal(mask[idx(line)], true, `should stay masked: ${line}`);
+    }
+  });
+
+  test('the colored set is exactly the marker set', () => {
+    const colored = FIX.filter((l, i) => !mask[i] && /^ {10}[+-] /.test(l));
+    assert.equal(colored.length, MARKERS.length);
+  });
+
+  test('heredoc content never parses as resource headers', () => {
+    const { headers } = parsePlanStructure(FIX);
+    assert.equal(headers.length, 7);
   });
 });
 

@@ -1,0 +1,97 @@
+Terraform used the selected providers to generate the following execution plan. Resource actions are
+indicated with the following symbols:
+  ~ update in-place
+
+Terraform will perform the following actions:
+
+  # mock_file.rendered_yaml will be updated in-place
+  ~ resource "mock_file" "rendered_yaml" {
+      ~ content = <<-EOT
+            "apiVersion": "mock.io/v1"
+            "kind": "Cluster"
+            "spec":
+          -   "channel": "stable"
+          +   "channel": "mock-channel"
+          -   "configBase": "s3://mock-old-bucket/cluster"
+          +   "configBase": "s3://mock-new-bucket/kops/cluster"
+              "etcdClusters":
+              - "etcdMembers":
+                - "instanceGroup": "mock-cp-a"
+                  "name": "a"
+          -   - "instanceGroup": "mock-cp-b"
+          -     "name": "b"
+              "iam":
+          -     "legacy": false
+          +     "legacy": true
+          +   "mockMapList":
+          +   - "mockKey": "mock-value-1"
+          +     "mockPeer": "mock-peer-1"
+          +   "sshAccess":
+          +   - "192.0.2.0/24"
+        EOT
+        id      = "mock-rendered"
+    }
+
+  # mock_vm.host will be updated in-place
+  ~ resource "mock_vm" "host" {
+      ~ user_data = <<-EOT
+            #!/bin/bash
+          - yum install -y mock-pkg
+          + systemctl enable mock-svc
+        EOT
+        id        = "mock-host"
+    }
+
+  # mock_ci.job will be updated in-place
+  ~ resource "mock_ci" "job" {
+      ~ buildspec = <<-EOT
+          - version: 0.2
+          + version: 0.3
+            phases:
+              build:
+                commands:
+                  - echo mock-build
+        EOT
+    }
+
+  # mock_doc.notes will be updated in-place
+  ~ resource "mock_doc" "notes" {
+      ~ body   = <<-EOT
+            - keep-item-1
+            - keep-item-2
+          - stale-zero-indent-line
+        EOT
+      ~ digest = <<-EOT
+            - old-item-1
+            - old-item-2
+            old-plain-line
+        EOT -> (known after apply)
+    }
+
+  # mock_data.replaced will be updated in-place
+  ~ resource "mock_data" "replaced" {
+      ~ input = <<-EOT
+          - old-mock-line-1
+          + new-mock-line-1
+          - old-mock-line-2
+          + new-mock-line-2
+        EOT
+    }
+
+  # mock_secret.gone will be destroyed
+  - resource "mock_secret" "gone" {
+      - payload = <<-EOT
+            - destroyed-list-item
+            destroyed-plain-line
+        EOT -> null
+    }
+
+  # mock_ci.fresh will be created
+  + resource "mock_ci" "fresh" {
+      + buildspec = <<-EOT
+            - created-list-item
+            version: 0.2
+        EOT
+    }
+
+Plan: 1 to add, 4 to change, 1 to destroy.
