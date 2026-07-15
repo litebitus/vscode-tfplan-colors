@@ -1,3 +1,7 @@
+## 1.5.6 (2026-07-14)
+
+- fix: refresh tree and retry once when summary reveal hits a dropped widget node
+
 ## 1.5.5 (2026-07-13)
 
 - fix: generation-scoped summary tree item ids to stop stale widget state across plans
