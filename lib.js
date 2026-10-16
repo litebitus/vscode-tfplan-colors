@@ -64,7 +64,8 @@ function scanLine(text) {
 
 // Content sniff for plain .txt files that hold terraform plan output.
 function looksLikePlanText(head) {
-  return /^Terraform (used the selected providers|will perform|planned the following)/m.test(head) ||
+  return /^Terraform (used the selected providers|will perform|planned the following|detected the following changes)/m
+           .test(head) ||
          /Resource actions are\s*$/m.test(head) ||
          /indicated with the following symbols/.test(head);
 }

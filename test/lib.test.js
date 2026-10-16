@@ -197,6 +197,13 @@ describe('looksLikePlanText', () => {
   test('detects "Terraform will perform" alone', () => {
     assert.ok(looksLikePlanText('Terraform will perform the following actions:'));
   });
+  test('detects a drift note head', () => {
+    assert.ok(looksLikePlanText([
+      'Note: Objects have changed outside of Terraform',
+      '',
+      'Terraform detected the following changes made outside of Terraform since the last "terraform apply" which',
+    ].join('\n')));
+  });
   test('detects legend fragment', () => {
     assert.ok(looksLikePlanText('indicated with the following symbols:'));
   });
