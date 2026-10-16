@@ -1,3 +1,7 @@
+## 1.6.1 (2026-10-16)
+
+- fix: detect plans that open with a drift note, and pin test-electron 3.1.0 for VS Code's renamed macOS binary
+
 ## 1.6.0 (2026-07-15)
 
 - feat: color terraform line-diff markers inside updated heredocs
