@@ -153,16 +153,21 @@ One-time setup:
    exported as `OVSX_PAT` — Open VSX serves VSCode forks like Antigravity
 4. `npm i -g @vscode/vsce ovsx`
 5. `vsce login lite2073` (paste the PAT)
+6. `npm login`, for the npm package below
 
 Each release:
 
 ```sh
-make publish              # bump patch; publish to Open VSX + VS Code Marketplace; push tag
+make publish              # bump patch; publish to Open VSX + VS Code Marketplace + npm; push tag
 make publish BUMP=minor   # bump minor instead
 ```
 
 To only build the .vsix without publishing: `make package`.
 To retry a single store for the current version: `make publish-ovsx` / `make publish-vsce`.
+
+The plan classifier, `lib.js`, is also published to npm as `tfplan-colors` at the
+extension's version, imported as `tfplan-colors/lib`, so a web page renders a
+plan with the same rules the editor does.
 
 ## Development
 

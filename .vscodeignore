@@ -1,4 +1,5 @@
 .gitignore
+.npmignore
 Makefile
 changelog.sh
 test/

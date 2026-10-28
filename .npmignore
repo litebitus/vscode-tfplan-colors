@@ -1,0 +1,10 @@
+.vscode-test/
+.vscode-test.mjs
+.vscodeignore
+Makefile
+changelog.sh
+test/
+*.vsix
+icon.svg
+fileicon.svg
+**/.DS_Store

@@ -13,7 +13,7 @@ VERSION = $(shell node -p "require('./package.json').version")
 PUBLISHER = $(shell node -p "require('./package.json').publisher")
 EXT_ID = $(PUBLISHER).$(shell node -p "require('./package.json').name")
 
-.PHONY: test test-all package publish preflight bump push publish-ovsx publish-vsce uninstall
+.PHONY: test test-all package publish preflight bump push publish-ovsx publish-vsce publish-npm uninstall
 
 test:
 	node --test test/*.test.js
@@ -34,7 +34,7 @@ package: test-all
 # push runs last so tags only reach the remote for published versions, and
 # pushes only the current version's tag; if the vsce step hangs and you
 # Ctrl+C, run `make push` afterwards.
-publish: preflight bump publish-ovsx publish-vsce push
+publish: preflight bump publish-ovsx publish-vsce publish-npm push
 
 # dirty check is stricter than npm version's own: also refuses on untracked
 # files, since vsce/ovsx package the working tree and would ship them uncommitted
@@ -42,6 +42,7 @@ preflight:
 	@test -z "$$(git status --porcelain)" || { git status --short; echo "error: git tree is dirty — commit or stash first"; exit 1; }
 	@vsce ls-publishers 2>/dev/null | grep -qx "$(PUBLISHER)" || { echo "error: vsce is not logged in as $(PUBLISHER) — run: vsce login $(PUBLISHER)"; exit 1; }
 	@test -n "$$OVSX_PAT" || { echo "error: OVSX_PAT is not set — export your Open VSX token first"; exit 1; }
+	@npm whoami >/dev/null 2>&1 || { echo "error: npm is not logged in — run: npm login"; exit 1; }
 
 bump:
 	npm version $(BUMP)
@@ -54,6 +55,9 @@ publish-ovsx: preflight package
 
 publish-vsce: preflight package
 	vsce publish --packagePath $(VSIX)
+
+publish-npm: preflight
+	npm publish
 
 # Strips this extension's entries from an editor's extensions.json — a wiped
 # folder with a live registry entry breaks reinstall ("restart the IDE before

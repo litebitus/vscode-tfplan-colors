@@ -11,6 +11,17 @@ const ACTION_MARKER = {
   forget:  '.',
 };
 
+// Action colors — chosen to be readable on both dark and light themes.
+// replace uses magenta: the common convention for destroy-then-create.
+const ACTION_COLORS = {
+  create:  '#3FB950',
+  update:  '#D29922',
+  destroy: '#F85149',
+  replace: '#DB61A2',
+  read:    '#8B949E',
+  forget:  '#8B949E',
+};
+
 // Resource header, e.g.:
 //   # module.a.aws_x.y will be created
 //   # aws_x.y must be replaced
@@ -427,6 +438,7 @@ function foldingRanges(lines) {
 
 module.exports = {
   ACTION_MARKER,
+  ACTION_COLORS,
   HEADER_RE,
   headerAction,
   classifyLine,

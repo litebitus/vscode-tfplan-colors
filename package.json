@@ -17,6 +17,11 @@
   ],
   "icon": "icon.png",
   "main": "./extension.js",
+  "exports": {
+    ".": "./extension.js",
+    "./lib": "./lib.js",
+    "./package.json": "./package.json"
+  },
   "devDependencies": {
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "3.1.0"

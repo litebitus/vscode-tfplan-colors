@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   ACTION_MARKER,
+  ACTION_COLORS,
   scanLine,
   heredocMask,
   planSymbols,
@@ -17,17 +18,6 @@ const {
   planPathFrom,
   planSummary,
 } = require('./lib');
-
-// Action colors — chosen to be readable on both dark and light themes.
-// replace uses magenta: the common convention for destroy-then-create.
-const COLORS = {
-  create:  '#3FB950',
-  update:  '#D29922',
-  destroy: '#F85149',
-  replace: '#DB61A2',
-  read:    '#8B949E',
-  forget:  '#8B949E',
-};
 
 function gutterIcon(color) {
   const svg =
@@ -43,7 +33,7 @@ let headerTypes = {};    // action -> bold header decoration
 let forcesType;          // "# forces replacement" inline highlight
 
 function createDecorationTypes(context) {
-  for (const [action, color] of Object.entries(COLORS)) {
+  for (const [action, color] of Object.entries(ACTION_COLORS)) {
     lineTypes[action] = vscode.window.createTextEditorDecorationType({
       color,
       fontStyle: action === 'forget' ? 'italic' : undefined,
@@ -63,7 +53,7 @@ function createDecorationTypes(context) {
     context.subscriptions.push(lineTypes[action], headerTypes[action]);
   }
   forcesType = vscode.window.createTextEditorDecorationType({
-    color: COLORS.destroy,
+    color: ACTION_COLORS.destroy,
     fontWeight: 'bold',
   });
   context.subscriptions.push(forcesType);
@@ -92,7 +82,7 @@ function updateDecorations(editor) {
   const lineBuckets = {};
   const headerBuckets = {};
   const forces = [];
-  for (const action of Object.keys(COLORS)) {
+  for (const action of Object.keys(ACTION_COLORS)) {
     lineBuckets[action] = [];
     headerBuckets[action] = [];
   }
@@ -118,7 +108,7 @@ function updateDecorations(editor) {
     }
   }
 
-  for (const action of Object.keys(COLORS)) {
+  for (const action of Object.keys(ACTION_COLORS)) {
     editor.setDecorations(lineTypes[action], lineBuckets[action]);
     editor.setDecorations(headerTypes[action], headerBuckets[action]);
   }

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  ACTION_MARKER,
+  ACTION_COLORS,
   headerAction,
   classifyLine,
   scanLine,
@@ -74,6 +76,15 @@ const PLAN = [
   /*47*/ '',
   /*48*/ 'Plan: 1 to add, 2 to change, 2 to destroy.',
 ];
+
+describe('ACTION_COLORS', () => {
+  test('colors every action the parser marks, as a hex color', () => {
+    assert.deepEqual(Object.keys(ACTION_COLORS).sort(), Object.keys(ACTION_MARKER).sort());
+    for (const color of Object.values(ACTION_COLORS)) {
+      assert.match(color, /^#[0-9A-F]{6}$/);
+    }
+  });
+});
 
 describe('classifyLine', () => {
   const cases = [
