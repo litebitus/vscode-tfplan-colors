@@ -1,3 +1,7 @@
+## 1.6.2 (2026-10-28)
+
+- feat: publish lib.js to npm as tfplan-colors/lib with the action colors exported as ACTION_COLORS
+
 ## 1.6.1 (2026-10-16)
 
 - fix: detect plans that open with a drift note, and pin test-electron 3.1.0 for VS Code's renamed macOS binary
