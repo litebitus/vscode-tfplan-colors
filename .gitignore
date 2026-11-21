@@ -1,4 +1,7 @@
 *.vsix
 .DS_Store
 node_modules/
+!.vscode/
+.vscode/*
+!.vscode/settings.json
 .vscode-test/

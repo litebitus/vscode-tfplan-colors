@@ -546,6 +546,7 @@ async function saveRenderedPlan() {
   if (!target) return;
   await vscode.workspace.fs.writeFile(target, Buffer.from(editor.document.getText(), 'utf8'));
   await vscode.window.showTextDocument(target);
+  await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
 }
 
 const SYMBOL_KINDS = {
