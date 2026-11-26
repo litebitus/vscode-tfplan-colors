@@ -1,3 +1,9 @@
+## 1.6.3 (2026-11-26)
+
+- fix: open the saved text plan read-only
+- build(release): create the GitHub release from the version's CHANGELOG section after publishing
+- fix: export lib.js as the package root and use npm's git+ repository url
+
 ## 1.6.2 (2026-10-28)
 
 - feat: publish lib.js to npm as tfplan-colors/lib with the action colors exported as ACTION_COLORS
